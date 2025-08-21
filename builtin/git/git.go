@@ -78,7 +78,11 @@ func isDirty(ctx context.Context) bool {
 	defer cancel()
 	
 	cmd := exec.CommandContext(ctx, "git", "diff", "--quiet", "--ignore-submodules", "--")
-	return cmd.Run() != nil // non-zero exit means dirty
+	if cmd.Run() != nil { return true }
+	// quick untracked probe (cheap on small repos, still bounded by timeout)
+	cmd = exec.CommandContext(ctx, "git", "ls-files", "--others", "--exclude-standard", "-m", "-d")
+	out, _ := cmd.Output()
+	return len(strings.TrimSpace(string(out))) > 0
 }
 
 func getUpstreamInfo(ctx context.Context) string {

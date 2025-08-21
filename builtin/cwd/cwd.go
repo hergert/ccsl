@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 
+	"ccsl/internal/palette"
 	"ccsl/internal/types"
 )
 
@@ -35,8 +36,10 @@ func Render(ctx context.Context, ctxObj map[string]any) types.Segment {
 		dirName = currentDir
 	}
 
+	icon := ""
+	if palette.IconsEnabled(ctx) { icon = "📁 " }
 	return types.Segment{
-		Text:     "📁 " + dirName,
+		Text:     icon + dirName,
 		Priority: 80, // high priority
 	}
 }

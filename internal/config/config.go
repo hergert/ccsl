@@ -3,7 +3,6 @@ package config
 import (
 	"os"
 	"path/filepath"
-	"strconv"
 
 	"github.com/BurntSushi/toml"
 )
@@ -65,11 +64,8 @@ func Load() *Config {
 	}
 	
 	// Apply environment variable overrides
-	if val := os.Getenv("CCSL_PROMPT_MAX"); val != "" {
-		if n, err := strconv.Atoi(val); err == nil {
-			cfg.UI.Truncate = n
-		}
-	}
+	// NOTE: CCSL_PROMPT_MAX belongs to the prompt segment, not UI.Truncate.
+	// Leave it for the prompt builtin to read.
 	
 	if val := os.Getenv("CCSL_ANSI"); val != "" {
 		cfg.Theme.ANSI = val != "0" && val != "false"

@@ -1,8 +1,10 @@
 package runner
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
+	"io"
 	"os/exec"
 	"strings"
 	"sync"
@@ -46,9 +48,17 @@ func Collect(ctx context.Context, claudeJSON []byte, cfg *config.Config) []types
 		wg.Add(1)
 		go func(id string, pcfg config.PluginConfig) {
 			defer wg.Done()
+
+			// Evaluate only_if guard if present
+			if pcfg.OnlyIf != "" && !shouldRun(ctxObj, pcfg.OnlyIf) {
+				return
+			}
 			
+			// Build a default cache key early (project/current dir)
+			defaultKey := buildDefaultCacheKey(id, ctxObj)
+
 			// Check cache first
-			if seg, found := getCached(id); found {
+			if seg, found := getCached(defaultKey); found {
 				segments <- seg
 				return
 			}
@@ -61,6 +71,8 @@ func Collect(ctx context.Context, claudeJSON []byte, cfg *config.Config) []types
 			
 			pluginCtx, cancel := context.WithTimeout(ctx, timeout)
 			defer cancel()
+			// Make cfg available to builtins via context
+			pluginCtx = context.WithValue(pluginCtx, types.CtxKeyConfig, cfg)
 
 			var seg types.Segment
 			if pcfg.Type == "builtin" {
@@ -74,9 +86,13 @@ func Collect(ctx context.Context, claudeJSON []byte, cfg *config.Config) []types
 				seg.Priority = 50 // default priority
 			}
 
-			// Cache the result
-			if pcfg.CacheTTLMS > 0 {
-				setCached(id, seg, time.Duration(pcfg.CacheTTLMS)*time.Millisecond)
+			// Decide cache key and TTL (plugin response wins if provided)
+			key := defaultKey
+			if seg.CacheKey != "" { key = id + "|" + seg.CacheKey }
+			ttl := pcfg.CacheTTLMS
+			if seg.CacheTTLMS > 0 { ttl = seg.CacheTTLMS }
+			if ttl > 0 {
+				setCached(key, seg, time.Duration(ttl)*time.Millisecond)
 			}
 
 			segments <- seg
@@ -120,13 +136,16 @@ func runBuiltin(ctx context.Context, id string, ctxObj map[string]any) types.Seg
 func runExec(ctx context.Context, command string, claudeJSON []byte) types.Segment {
 	cmd := exec.CommandContext(ctx, command)
 	cmd.Stdin = strings.NewReader(string(claudeJSON))
-	
-	output, err := cmd.Output()
+	// Limit stdout to 4KB
+	var buf bytes.Buffer
+	cmd.Stdout = &limitedWriter{w: &buf, n: 4096}
+	cmd.Stderr = io.Discard
+	err := cmd.Run()
 	if err != nil {
 		return types.Segment{} // silent failure
 	}
 
-	result := strings.TrimSpace(string(output))
+	result := strings.TrimSpace(buf.String())
 	if result == "" {
 		return types.Segment{}
 	}
@@ -135,10 +154,12 @@ func runExec(ctx context.Context, command string, claudeJSON []byte) types.Segme
 	var resp types.PluginResponse
 	if err := json.Unmarshal([]byte(result), &resp); err == nil {
 		return types.Segment{
-			Text:     resp.Text,
-			Style:    resp.Style,
-			Align:    resp.Align,
-			Priority: resp.Priority,
+			Text:       resp.Text,
+			Style:      resp.Style,
+			Align:      resp.Align,
+			Priority:   resp.Priority,
+			CacheTTLMS: resp.CacheTTLMS,
+			CacheKey:   resp.CacheKey,
 		}
 	}
 
@@ -146,6 +167,16 @@ func runExec(ctx context.Context, command string, claudeJSON []byte) types.Segme
 	return types.Segment{
 		Text: result,
 	}
+}
+
+// buildDefaultCacheKey creates a cache key with workspace context
+func buildDefaultCacheKey(id string, ctxObj map[string]any) string {
+	var pd, cd string
+	if ws, ok := ctxObj["workspace"].(map[string]any); ok {
+		if s, ok := ws["project_dir"].(string); ok { pd = s }
+		if s, ok := ws["current_dir"].(string); ok { cd = s }
+	}
+	return id + "|" + pd + "|" + cd
 }
 
 func getCached(id string) (types.Segment, bool) {
@@ -168,4 +199,20 @@ func setCached(id string, seg types.Segment, ttl time.Duration) {
 		segment: seg,
 		expires: time.Now().Add(ttl),
 	}
+}
+
+type limitedWriter struct {
+	w io.Writer
+	n int64
+	written int64
+}
+
+func (l *limitedWriter) Write(p []byte) (int, error) {
+	if l.written >= l.n { return 0, io.EOF }
+	if int64(len(p)) > l.n - l.written {
+		p = p[:l.n - l.written]
+	}
+	n, err := l.w.Write(p)
+	l.written += int64(n)
+	return n, err
 }

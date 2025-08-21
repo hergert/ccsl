@@ -1,6 +1,7 @@
 package render
 
 import (
+	"net/url"
 	"regexp"
 	"strings"
 
@@ -52,30 +53,10 @@ func processTemplateMatch(match string, segMap map[string]types.Segment, pal *pa
 	// Parse options
 	var prefix, suffix string
 	if options != "" {
-		// Simple parsing for prefix= and suffix=
-		if strings.Contains(options, "prefix=") {
-			prefixStart := strings.Index(options, "prefix=") + 7
-			prefixEnd := strings.Index(options[prefixStart:], "&")
-			if prefixEnd == -1 {
-				prefixEnd = strings.Index(options[prefixStart:], "}")
-				if prefixEnd == -1 {
-					prefixEnd = len(options[prefixStart:])
-				}
-			}
-			prefix = options[prefixStart : prefixStart+prefixEnd]
-		}
-		
-		if strings.Contains(options, "suffix=") {
-			suffixStart := strings.Index(options, "suffix=") + 7
-			suffixEnd := strings.Index(options[suffixStart:], "&")
-			if suffixEnd == -1 {
-				suffixEnd = strings.Index(options[suffixStart:], "}")
-				if suffixEnd == -1 {
-					suffixEnd = len(options[suffixStart:])
-				}
-			}
-			suffix = options[suffixStart : suffixStart+suffixEnd]
-		}
+		q := strings.TrimPrefix(options, "?")
+		vals, _ := url.ParseQuery(q)
+		prefix = vals.Get("prefix")
+		suffix = vals.Get("suffix")
 	}
 
 	// Apply styling
@@ -89,11 +70,40 @@ func intelligentTruncate(text string, segments []types.Segment, maxLength int) s
 		return text
 	}
 
-	// For now, simple truncation with ellipsis
-	// TODO: Implement priority-based truncation
-	if maxLength <= 3 {
-		return strings.Repeat(".", maxLength)
+	// 1) Find the lowest-priority segment (often 'prompt') and trim its contribution.
+	// We do a best-effort pass: try to shorten the last occurrence of that segment's text.
+	if maxLength > 3 {
+		low := segments[0]
+		for _, s := range segments {
+			if s.Priority < low.Priority { low = s }
+		}
+		if low.Text != "" {
+			idx := strings.LastIndex(text, low.Text)
+			if idx >= 0 {
+				// Available budget when replacing this segment with a shorter version
+				keep := maxLength - (len(text) - len(low.Text))
+				if keep > 3 {
+					trimmed := wordTrim(low.Text, keep-3) + "..."
+					out := text[:idx] + trimmed + text[idx+len(low.Text):]
+					if len(out) <= maxLength {
+						return out
+					}
+					text = out // fallthrough to hard cut
+				}
+			}
+		}
 	}
-
+	// 2) Hard cut with ellipsis at the very end as last resort.
+	if maxLength <= 3 { return strings.Repeat(".", maxLength) }
 	return text[:maxLength-3] + "..."
+}
+
+// wordTrim tries to cut on a word boundary.
+func wordTrim(s string, n int) string {
+	if len(s) <= n { return s }
+	cut := s[:n]
+	if i := strings.LastIndexAny(cut, " \t"); i > n/2 {
+		return strings.TrimSpace(cut[:i])
+	}
+	return strings.TrimSpace(cut)
 }

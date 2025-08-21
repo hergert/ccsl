@@ -4,6 +4,7 @@ import (
 	"context"
 	"strings"
 
+	"ccsl/internal/palette"
 	"ccsl/internal/types"
 )
 
@@ -32,8 +33,10 @@ func Render(ctx context.Context, ctxObj map[string]any) types.Segment {
 		text = modelName + " (" + modelID + ")"
 	}
 
+	icon := ""
+	if palette.IconsEnabled(ctx) { icon = "🤖 " }
 	return types.Segment{
-		Text:     "🤖 " + text,
+		Text:     icon + text,
 		Style:    "bold",
 		Priority: 90, // high priority
 	}

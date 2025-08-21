@@ -1,9 +1,11 @@
 package palette
 
 import (
+	"context"
 	"strings"
 
 	"ccsl/internal/config"
+	"ccsl/internal/types"
 )
 
 // ANSI escape codes
@@ -50,4 +52,12 @@ func (p *Palette) Apply(text, style string) string {
 		}
 		return text
 	}
+}
+
+// IconsEnabled checks if icons should be displayed based on theme config
+func IconsEnabled(ctx context.Context) bool {
+	if cfg, ok := ctx.Value(types.CtxKeyConfig).(*config.Config); ok {
+		return cfg.Theme.Icons
+	}
+	return true
 }

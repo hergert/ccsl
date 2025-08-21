@@ -3,6 +3,7 @@ package prompt
 import (
 	"context"
 	"encoding/json"
+	"io"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -35,7 +36,10 @@ func Render(ctx context.Context, ctxObj map[string]any) types.Segment {
 	
 	// Get prompt max length from environment
 	promptMax := 80
-	if val := os.Getenv("STATUSLINE_PROMPT_MAX"); val != "" {
+	// Prefer CCSL_PROMPT_MAX; accept legacy STATUSLINE_PROMPT_MAX for compatibility
+	if val := os.Getenv("CCSL_PROMPT_MAX"); val != "" {
+		if n, err := strconv.Atoi(val); err == nil { promptMax = n }
+	} else if val := os.Getenv("STATUSLINE_PROMPT_MAX"); val != "" {
 		if n, err := strconv.Atoi(val); err == nil {
 			promptMax = n
 		}
@@ -93,17 +97,17 @@ func lastUserPromptFromTranscript(path string) string {
 	if path == "" {
 		return ""
 	}
-	
-	data, err := os.ReadFile(path)
-	if err != nil {
-		return ""
-	}
-	
-	// Read tail of file for performance (100KB should be plenty)
-	content := string(data)
-	if len(content) > 100000 {
-		content = content[len(content)-100000:]
-	}
+	f, err := os.Open(path)
+	if err != nil { return "" }
+	defer f.Close()
+	const tail = int64(100_000)
+	st, err := f.Stat()
+	if err != nil { return "" }
+	start := st.Size() - tail
+	if start < 0 { start = 0 }
+	if _, err := f.Seek(start, io.SeekStart); err != nil { return "" }
+	b, _ := io.ReadAll(f)
+	content := string(b)
 	
 	lines := strings.Split(content, "\n")
 	
@@ -129,7 +133,7 @@ func lastUserPromptFromTranscript(path string) string {
 	
 	// Fallback: try to parse entire file as JSON array
 	var data_parsed any
-	if err := json.Unmarshal(data, &data_parsed); err == nil {
+	if err := json.Unmarshal(b, &data_parsed); err == nil {
 		if items, ok := data_parsed.([]any); ok {
 			for i := len(items) - 1; i >= 0; i-- {
 				if item, ok := items[i].(map[string]any); ok {

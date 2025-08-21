@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 
+	"ccsl/internal/palette"
 	"ccsl/internal/types"
 )
 
@@ -31,8 +32,10 @@ func Render(ctx context.Context, ctxObj map[string]any) types.Segment {
 	}
 	
 	if projectDir == "" {
+		icon := ""
+		if palette.IconsEnabled(ctx) { icon = "⚙ " }
 		return types.Segment{
-			Text:     "⚙ " + agent,
+			Text:     icon + agent,
 			Priority: 70,
 		}
 	}
@@ -48,8 +51,10 @@ func Render(ctx context.Context, ctxObj map[string]any) types.Segment {
 		}
 	}
 
+	icon := ""
+	if palette.IconsEnabled(ctx) { icon = "⚙ " }
 	return types.Segment{
-		Text:     "⚙ " + agent,
+		Text:     icon + agent,
 		Priority: 70,
 	}
 }
