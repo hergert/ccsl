@@ -1,0 +1,131 @@
+# ccsl Plugin Protocol
+
+## Overview
+
+ccsl uses a simple stdin/stdout protocol for plugins. Any executable on your PATH prefixed with `ccsl-` is automatically discovered as a plugin.
+
+## Input
+
+Plugins receive Claude Code's statusLine JSON on stdin. Example:
+
+```json
+{
+  "model": {
+    "id": "claude-3-5-sonnet-20241022",
+    "display_name": "Sonnet 3.5"
+  },
+  "workspace": {
+    "current_dir": "/Users/user/project",
+    "project_dir": "/Users/user/project"
+  },
+  "transcript_path": "/path/to/transcript.jsonl",
+  "cost": {
+    "total_cost_usd": 0.025,
+    "total_duration_ms": 1500
+  }
+}
+```
+
+## Output
+
+Plugins can return either:
+
+### Plain Text (Simple)
+Just print the segment text and exit 0:
+```bash
+echo "🔥 hot"
+```
+
+### Structured JSON (Advanced)
+Return a JSON object with full control:
+```json
+{
+  "text": "⚙ main ↑2 ↓1",
+  "style": "dim",
+  "align": "left",
+  "priority": 50,
+  "cache_ttl_ms": 800
+}
+```
+
+## Fields
+
+- **text** (required): The segment text to display
+- **style**: "normal", "bold", "dim", or raw ANSI escape codes
+- **align**: "left" or "right" (for future layout features)
+- **priority**: Number for truncation order (higher = keep longer, default 50)
+- **cache_ttl_ms**: How long ccsl should cache this result
+
+## Contract Rules
+
+1. **Timeout**: Plugins must complete within their configured timeout (default 120ms)
+2. **Silent failure**: If a plugin times out or errors, it's silently skipped
+3. **Max output**: Output is limited to prevent runaway segments
+4. **No shells**: ccsl executes plugins directly, no shell interpolation
+5. **Read stdin**: Always consume stdin to prevent blocking, even if unused
+
+## Discovery
+
+Plugins are discovered by:
+1. Executables matching `ccsl-*` on your PATH
+2. Absolute paths specified in config files
+
+## Examples
+
+### Python with uv
+```python
+#!/usr/bin/env -S uv run --script
+# /// script
+# requires-python = ">=3.11"
+# dependencies = []
+# ///
+import json, sys
+
+data = json.load(sys.stdin)
+# ... process data ...
+print(json.dumps({"text": "result", "style": "dim"}))
+```
+
+### Bash
+```bash
+#!/bin/bash
+cat > /dev/null  # consume stdin
+echo '{"text": "🔋 85%", "priority": 30}'
+```
+
+### Go
+```go
+package main
+// ... read from os.Stdin, process, write to os.Stdout
+```
+
+## Configuration
+
+Configure plugins in `~/.config/ccsl/config.toml`:
+
+```toml
+[plugins]
+order = ["model", "cwd", "agent", "git", "cost", "uptime", "prompt"]
+
+[plugin.cost]
+type = "exec"
+command = "ccsl-cost"
+timeout_ms = 80
+cache_ttl_ms = 500
+only_if = "has(cost.total_cost_usd)"
+```
+
+## Testing
+
+Test your plugin:
+```bash
+echo '{"model":{"display_name":"Test"}}' | ccsl-myplugin
+```
+
+## Best Practices
+
+1. **Fast**: Complete in <100ms
+2. **Robust**: Handle missing/malformed input gracefully
+3. **Cacheable**: Use cache_ttl_ms for expensive operations
+4. **Informative**: Use priority to indicate importance
+5. **Quiet**: No debug output except on errors

@@ -1,0 +1,18 @@
+#!/bin/bash
+
+# Simple uptime plugin that shows system uptime
+# Reads Claude JSON from stdin (ignored for this example)
+
+# Read stdin to prevent blocking (requirement of plugin protocol)
+cat > /dev/null
+
+# Get uptime in a compact format
+if command -v uptime >/dev/null 2>&1; then
+    uptime_output=$(uptime | sed -E 's/.*up[[:space:]]+([^,]+).*/\1/' | tr -d ' ')
+    
+    # Return structured JSON
+    echo "{\"text\": \"⏰ $uptime_output\", \"style\": \"dim\", \"priority\": 30}"
+else
+    # Fallback or no output for systems without uptime
+    exit 0
+fi
