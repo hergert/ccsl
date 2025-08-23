@@ -41,7 +41,7 @@ case $OS in
 esac
 
 # Download URL (will be updated when we have releases)
-BINARY_URL="https://github.com/user/ccsl/releases/latest/download/ccsl-${OS}-${ARCH}"
+BINARY_URL="https://github.com/hergert/ccsl/releases/latest/download/ccsl-${OS}-${ARCH}"
 
 # Install location
 INSTALL_DIR="$HOME/.local/bin"
@@ -60,11 +60,24 @@ if ! command -v go &> /dev/null; then
     exit 1
 fi
 
-# Build the binary
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
+# To support `curl | bash`, we need to clone the repo into a temp dir.
+if ! command -v git &> /dev/null; then
+    print_error "Git is required to build ccsl from source"
+    exit 1
+fi
 
-cd "$PROJECT_DIR"
+TMP_DIR=$(mktemp -d)
+trap 'rm -rf "$TMP_DIR"' EXIT # Cleanup on exit
+
+print_info "Cloning repository into a temporary directory..."
+if git clone --depth 1 https://github.com/hergert/ccsl.git "$TMP_DIR"; then
+    cd "$TMP_DIR"
+else
+    print_error "Failed to clone repository."
+    exit 1
+fi
+
+# Build the binary
 print_info "Building in $(pwd)..."
 
 if go build -o "$BINARY_PATH" ./cmd/ccsl; then

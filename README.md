@@ -5,7 +5,7 @@ A fast, extensible statusline for Claude Code with a clean plugin architecture.
 ## Features
 
 - **⚡ Fast**: Go binary with sub-200ms rendering
-- **🔧 Extensible**: Plugin system for custom segments  
+- **🔧 Extensible**: Plugin system for custom segments
 - **🎨 Themeable**: ANSI styling with auto/light/dark modes
 - **⚙️ Configurable**: TOML config with environment overrides
 - **🔒 Safe**: Timeouts, budgets, graceful degradation
@@ -13,25 +13,28 @@ A fast, extensible statusline for Claude Code with a clean plugin architecture.
 ## Quick Install
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/user/ccsl/main/scripts/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/hergert/ccsl/main/scripts/install.sh | bash
 ```
 
 Or clone and install:
+
 ```bash
-git clone https://github.com/user/ccsl.git ~/ccsl
+git clone https://github.com/hergert/ccsl.git ~/ccsl
 cd ~/ccsl && ./scripts/install.sh
 ```
 
 ## What You Get
 
 Default statusline shows:
-- **🤖 Model**: Display name (e.g. "Sonnet 3.5")  
+
+- **🤖 Model**: Display name (e.g. "Sonnet 3.5")
 - **📁 Directory**: Current working directory name
 - **⚙ Agent**: Current subagent or "main"
-- **Git Status**: Branch, dirty state, upstream tracking  
+- **Git Status**: Branch, dirty state, upstream tracking
 - **🗣 Last Prompt**: Most recent user message
 
 Example output:
+
 ```
 🤖 Sonnet 3.5  📁 ccsl  ⚙ main  main* ↑2 — 🗣 Add support for custom plugins
 ```
@@ -63,7 +66,7 @@ cache_ttl_ms = 300
 ## Built-in Segments
 
 - **model**: Claude model info from context
-- **cwd**: Current working directory basename  
+- **cwd**: Current working directory basename
 - **agent**: Active subagent from `.claude/state.json`
 - **git**: Branch, dirty state, upstream (with timeout protection)
 - **prompt**: Session-aware last user message
@@ -73,6 +76,7 @@ cache_ttl_ms = 300
 Create executable scripts named `ccsl-*` anywhere on your PATH:
 
 ### Python Plugin (with uv)
+
 ```python
 #!/usr/bin/env -S uv run --script
 # /// script
@@ -87,12 +91,13 @@ cost = data.get("cost", {}).get("total_cost_usd", 0)
 if cost > 0:
     print(json.dumps({
         "text": f"${cost:.3f}",
-        "style": "dim", 
+        "style": "dim",
         "priority": 40
     }))
 ```
 
 ### Bash Plugin
+
 ```bash
 #!/bin/bash
 cat > /dev/null  # consume stdin
@@ -104,7 +109,7 @@ See [docs/PLUGIN_PROTOCOL.md](docs/PLUGIN_PROTOCOL.md) for details.
 ## Environment Variables
 
 - `CCSL_PROMPT_MAX`: Override prompt length limit
-- `CCSL_ANSI`: Enable/disable ANSI colors (0/1)  
+- `CCSL_ANSI`: Enable/disable ANSI colors (0/1)
 - `CCSL_ICONS`: Enable/disable emoji icons (0/1)
 
 ## Performance
@@ -116,13 +121,13 @@ See [docs/PLUGIN_PROTOCOL.md](docs/PLUGIN_PROTOCOL.md) for details.
 
 ## Comparison with cc-inline-bar
 
-| Feature | cc-inline-bar | ccsl |
-|---------|---------------|------|
-| Startup | Python + uv (~50ms) | Go binary (~5ms) |
-| Plugins | Monolithic script | External processes |
-| Config | Hardcoded | TOML with env overrides |
-| Caching | None | Per-plugin TTL |
-| Distribution | Script install | Static binary |
+| Feature      | cc-inline-bar       | ccsl                    |
+| ------------ | ------------------- | ----------------------- |
+| Startup      | Python + uv (~50ms) | Go binary (~5ms)        |
+| Plugins      | Monolithic script   | External processes      |
+| Config       | Hardcoded           | TOML with env overrides |
+| Caching      | None                | Per-plugin TTL          |
+| Distribution | Script install      | Static binary           |
 
 ## Documentation
 
@@ -133,7 +138,7 @@ See [docs/PLUGIN_PROTOCOL.md](docs/PLUGIN_PROTOCOL.md) for details.
 ## Uninstall
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/user/ccsl/main/scripts/uninstall.sh | bash
+curl -fsSL https://raw.githubusercontent.com/hergert/ccsl/main/scripts/uninstall.sh | bash
 ```
 
 ## License
