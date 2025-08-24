@@ -111,6 +111,10 @@ See [docs/PLUGIN_PROTOCOL.md](docs/PLUGIN_PROTOCOL.md) for details.
 - `CCSL_PROMPT_MAX`: Override prompt length limit
 - `CCSL_ANSI`: Enable/disable ANSI colors (0/1)
 - `CCSL_ICONS`: Enable/disable emoji icons (0/1)
+- `CCSL_TEMPLATE`: Override UI template
+- `CCSL_ORDER`: Override plugin order (comma-separated)
+- `CCSL_THEME`: Override theme mode (auto/light/dark)
+- `CCSL_DISABLE`: Disable specific plugins (comma-separated)
 
 ## Performance
 
@@ -118,6 +122,22 @@ See [docs/PLUGIN_PROTOCOL.md](docs/PLUGIN_PROTOCOL.md) for details.
 - **Per-plugin timeout**: 120ms default
 - **Caching**: Plugin results cached with configurable TTL
 - **Parallel execution**: All plugins run concurrently
+
+## Diagnostics
+
+Run `ccsl doctor` to debug your setup:
+
+```bash
+# With a fixture JSON
+ccsl doctor -json ~/.claude/last_session.json
+
+# Or use the built-in minimal fixture
+ccsl doctor
+```
+
+This prints your active template, plugin order, timeouts, per-plugin timings
+(skipped/cache/ran/error), and the final rendered line. Use it to spot slow or
+misconfigured plugins quickly.
 
 ## Comparison with cc-inline-bar
 
