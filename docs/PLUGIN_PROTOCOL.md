@@ -1,84 +1,115 @@
-# ccsl Plugin Protocol
+# ccsl Plugin Guide
 
-## Overview
+Small executables that read JSON on **stdin** and write a single line on **stdout**.
 
-ccsl uses a simple stdin/stdout protocol for plugins. Any executable on your PATH prefixed with `ccsl-` is automatically discovered as a plugin.
+- `exec` plugins are declared in config and run in parallel with builtins
+- `ccsl` executes them directly (no shell), with optional `args`
+- Time budget is tight; default timeout is 120 ms per plugin
 
-## Input
+---
 
-Plugins receive Claude Code's statusLine JSON on stdin. Example:
+## Input (stdin)
+
+Claude's statusLine JSON. Fields vary by version; expect keys like:
 
 ```json
 {
-  "model": {
-    "id": "claude-3-5-sonnet-20241022",
-    "display_name": "Sonnet 3.5"
-  },
+  "model": { "id": "claude-3-5-sonnet-20241022", "display_name": "Sonnet 3.5" },
   "workspace": {
-    "current_dir": "/Users/user/project",
-    "project_dir": "/Users/user/project"
+    "current_dir": "/path/project",
+    "project_dir": "/path/project"
   },
-  "transcript_path": "/path/to/transcript.jsonl",
-  "cost": {
-    "total_cost_usd": 0.025,
-    "total_duration_ms": 1500
-  }
+  "transcript_path": "/path/to/session.jsonl",
+  "cost": { "total_cost_usd": 0.025, "total_duration_ms": 1500 }
 }
 ```
 
-## Output
+Always consume stdin (even if you ignore the data) to avoid blocking.
 
-Plugins can return either:
+## Output (stdout)
 
-### Plain Text (Simple)
+**Option A — Plain text**
 
-Just print the segment text and exit 0:
+Just print the segment text:
 
 ```bash
-echo "🔥 hot"
+echo "🔋 85%"
 ```
 
-### Structured JSON (Advanced)
+**Option B — JSON object**
 
-Return a JSON object with full control:
+Return a small JSON with formatting and hints:
 
 ```json
 {
-  "text": "🚀 v1.2.3",
-  "style": "bold",
+  "text": "⏱ 2m17s",
+  "style": "dim",
   "align": "left",
-  "priority": 50,
-  "cache_ttl_ms": 800,
+  "priority": 40,
+  "cache_ttl_ms": 1500,
   "cache_key": "optional-scope-key"
 }
 ```
 
 ### Fields
 
-- **text**: The string to be displayed.
-- **style**: "normal", "bold", "dim", or raw ANSI escape codes
-- **align**: (Optional) `left` or `right`. Default is `left`. (Right alignment is reserved for future use).
-- **priority**: (Optional) A number used for truncation. Higher priority segments are kept. Default is `50`.
-- **cache_ttl_ms**: How long ccsl should cache this result
-- **cache_key**: Optional string to scope the cache (e.g., include transcript path or current commit)
-  If omitted, ccsl scopes by `plugin_id|project_dir|current_dir`.
+- **text** (required): string to display
+- **style** (optional): `"normal"` | `"bold"` | `"dim"` (or raw ANSI; ccsl will wrap)
+- **align** (optional): `"left"` | `"right"` (reserved for future layout)
+- **priority** (optional): integer; higher numbers are kept longer when truncating
+- **cache_ttl_ms** (optional): cache duration hint
+- **cache_key** (optional): scope hint (safe to include; ccsl may ignore)
 
-## Contract Rules
+## Config reference (`~/.config/ccsl/config.toml`)
 
-1. **Timeout**: Plugins must complete within their configured timeout (default 120ms)
-2. **Silent failure**: If a plugin times out or errors, it's silently skipped
-3. **Max output**: Output is limited to prevent runaway segments
-4. **No shells**: ccsl executes plugins directly, no shell interpolation
-5. **Read stdin**: Always consume stdin to prevent blocking, even if unused
+Declare plugins under `[plugins].order` and configure per plugin:
 
-## Discovery
+```toml
+[plugins]
+order = ["model", "cwd", "git", "cost", "uptime", "prompt"]
 
-ccsl runs plugins **explicitly listed** in your config under `[plugins].order`.
-Executables starting with `ccsl-` on your PATH are **discoverable** (e.g., via `ccsl list`) but are not executed unless listed in the config.
+[plugin.cost]
+type = "exec"
+command = "ccsl-cost"
+args = []                # optional; no shell is used
+timeout_ms = 80
+cache_ttl_ms = 1500
+only_if = "has(cost.total_cost_usd)"  # see expressions below
+
+[plugin.uptime]
+type = "exec"
+command = "ccsl-uptime"
+timeout_ms = 80
+cache_ttl_ms = 500
+```
+
+## Execution contract
+
+- **Time budget**: complete before your `timeout_ms` (default 120 ms).
+- **Silent failure**: errors/timeouts are skipped; ccsl continues.
+- **Stdout limit**: ~4 KiB, first line is used.
+- **No shells**: `command` + `args` are executed directly.
+- **Read stdin**: always consume it.
+
+## Only‑if expressions
+
+Skip your plugin unless a condition is met. Supported forms:
+
+- `has(a.b.c)` — path exists
+- `eq(a.b, "value")` / `ne(a.b, "value")` — equality/inequality (numbers/bools may be unquoted)
+- `a.b.c` — truthy check (non‑empty, not "0", not "false")
+
+Examples:
+
+```toml
+[plugin.cost]      only_if = "has(cost.total_cost_usd)"
+[plugin.telemetry] only_if = "eq(model.display_name, \"Sonnet 3.5\")"
+[plugin.debug]     only_if = "workspace.project_dir"
+```
 
 ## Examples
 
-### Python with uv
+### Python (with uv inline script)
 
 ```python
 #!/usr/bin/env -S uv run --script
@@ -89,53 +120,49 @@ Executables starting with `ccsl-` on your PATH are **discoverable** (e.g., via `
 import json, sys
 
 data = json.load(sys.stdin)
-# ... process data ...
-print(json.dumps({"text": "result", "style": "dim"}))
+cost = (data.get("cost") or {}).get("total_cost_usd", 0.0)
+dur  = (data.get("cost") or {}).get("total_duration_ms", 0)
+
+if cost > 0:
+    text = f"${cost:.3f}" + (f" | {int(dur/1000)}s" if dur else "")
+    print(json.dumps({"text": text, "style": "dim", "priority": 40, "cache_ttl_ms": 1500}))
+```
+
+Make it executable and on PATH:
+
+```bash
+chmod +x ~/.local/bin/ccsl-cost
+```
+
+Add to config:
+
+```toml
+[plugins]        order = ["model","cwd","git","cost","prompt"]
+[plugin.cost]    type="exec" command="ccsl-cost" timeout_ms=80 cache_ttl_ms=1500 only_if="has(cost.total_cost_usd)"
 ```
 
 ### Bash
 
 ```bash
 #!/bin/bash
-cat > /dev/null  # consume stdin
-echo '{"text": "🔋 85%", "priority": 30}'
+# ccsl-uptime
+# Consume stdin to avoid blocking
+cat >/dev/null
+if command -v uptime >/dev/null 2>&1; then
+  u=$(uptime | sed -E 's/.*up[[:space:]]+([^,]+).*/\1/' | tr -d ' ')
+  echo "{\"text\":\"⏰ $u\",\"style\":\"dim\",\"priority\":30}"
+fi
 ```
 
-### Go
+## Best practices
 
-```go
-package main
-// ... read from os.Stdin, process, write to os.Stdout
-```
-
-## Configuration
-
-Configure plugins in `~/.config/ccsl/config.toml`:
-
-```toml
-[plugins]
-order = ["model", "cwd", "agent", "git", "cost", "uptime", "prompt"]
-
-[plugin.cost]
-type = "exec"
-command = "ccsl-cost"
-timeout_ms = 80
-cache_ttl_ms = 500
-only_if = "has(cost.total_cost_usd)"
-```
-
-## Testing
-
-Test your plugin:
+- **Finish in <100 ms**; prefer local state over network calls.
+- **Always handle missing/malformed fields**.
+- **Use `cache_ttl_ms`** for expensive computations.
+- **Don't write logs to stdout**; stderr is dropped as well—debug locally with a file or run plugin standalone:
 
 ```bash
 echo '{"model":{"display_name":"Test"}}' | ccsl-myplugin
 ```
 
-## Best Practices
-
-1. **Fast**: Complete in <100ms
-2. **Robust**: Handle missing/malformed input gracefully
-3. **Cacheable**: Use cache_ttl_ms for expensive operations
-4. **Informative**: Use priority to indicate importance
-5. **Quiet**: No debug output except on errors
+That's it—small programs in, small strings out.
