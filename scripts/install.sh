@@ -125,6 +125,14 @@ cache_ttl_ms = 300
 [limits]
 per_plugin_timeout_ms = 120
 total_budget_ms = 220
+
+# Optional: Enable usage & cost tracking (requires bun or node)
+# Add "ccusage" to [plugins].order above to enable
+# [plugin.ccusage]
+# type = "exec"
+# command = "ccsl-ccusage"
+# timeout_ms = 250
+# cache_ttl_ms = 1500
 EOF
     print_success "Created default config at $CCSL_CONFIG_DIR/config.toml"
 fi

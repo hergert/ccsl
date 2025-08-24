@@ -161,6 +161,40 @@ This prints your active template, plugin order, timeouts, per‑plugin timings
 (skipped/cache/ran/error), and the final rendered line. Use it to spot slow or
 misconfigured plugins quickly.
 
+## Optional: usage & cost (powered by ccusage)
+
+1. Install a JS runtime: `bun` (recommended) or `node` (for npx).
+
+2. Enable the plugin in `~/.config/ccsl/config.toml`:
+
+```toml
+[plugins]
+order = ["model", "cwd", "agent", "git", "ccusage", "prompt"]
+
+[plugin.ccusage]
+type = "exec"
+command = "ccsl-ccusage"
+timeout_ms = 250
+cache_ttl_ms = 1500
+```
+
+3. (Optional) Environment tweaks:
+
+```bash
+# monochrome (matches ccsl ANSI off)
+export CCSL_ANSI=0
+# show both cc & ccusage costs
+export CCSL_CCUSAGE_COST_SOURCE=both
+# add burn-rate emoji indicators
+export CCSL_CCUSAGE_BURN=emoji
+# track block % against your historical max
+export CCSL_CCUSAGE_TOKEN_LIMIT=max
+```
+
+4. Restart Claude Code.
+
+**Credits**: Usage metrics are provided by [ccusage](https://ccusage.com) (MIT), © 2024 ryoppippi. See their [docs](https://github.com/ryoppippi/ccusage) for details & flags.
+
 ## Notes
 
 - Exec plugin stdout is capped (~4 KiB). Stderr is discarded.

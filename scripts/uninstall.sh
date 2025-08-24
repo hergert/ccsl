@@ -14,6 +14,7 @@ print_success() { echo -e "${GREEN}✅ ${1}${NC}"; }
 print_warning() { echo -e "${YELLOW}⚠️  ${1}${NC}"; }
 
 BINARY_PATH="$HOME/.local/bin/ccsl"
+PLUGIN_PATH="$HOME/.local/bin/ccsl-ccusage"
 CLAUDE_DIR="$HOME/.claude"
 SETTINGS_FILE="$CLAUDE_DIR/settings.json"
 
@@ -23,6 +24,12 @@ print_info "Uninstalling ccsl..."
 if [ -f "$BINARY_PATH" ]; then
     rm "$BINARY_PATH"
     print_success "Removed ccsl binary"
+fi
+
+# Remove plugin
+if [ -f "$PLUGIN_PATH" ]; then
+    rm "$PLUGIN_PATH"
+    print_success "Removed ccsl-ccusage plugin"
 fi
 
 # Remove statusLine config from Claude settings
