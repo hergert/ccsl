@@ -33,13 +33,14 @@ type PluginsConfig struct {
 }
 
 type PluginConfig struct {
-	Type       string   `toml:"type"`    // builtin | exec
-	Command    string   `toml:"command"` // for exec type
-	Args       []string `toml:"args"`
-	Style      string   `toml:"style"` // normal | bold | dim
-	TimeoutMS  int      `toml:"timeout_ms"`
-	CacheTTLMS int      `toml:"cache_ttl_ms"`
-	OnlyIf     string   `toml:"only_if"` // simple condition
+	Type         string   `toml:"type"`    // builtin | exec
+	Command      string   `toml:"command"` // for exec type
+	Args         []string `toml:"args"`
+	Style        string   `toml:"style"` // normal | bold | dim
+	TimeoutMS    int      `toml:"timeout_ms"`
+	CacheTTLMS   int      `toml:"cache_ttl_ms"`
+	OnlyIf       string   `toml:"only_if"`        // simple condition
+	CacheKeyFrom string   `toml:"cache_key_from"` // dot path in context (e.g., "transcript_path")
 }
 
 type LimitsConfig struct {
@@ -111,7 +112,7 @@ func Load() *Config {
 func defaultConfig() *Config {
 	return &Config{
 		UI: UIConfig{
-			Template: "{model}  {cwd}  {agent}  {git?prefix=  }{prompt?prefix= — 🗣 }",
+			Template: "{model}  {cwd}{agent?prefix=  }{git?prefix=  }{prompt?prefix= — 🗣 }",
 			Truncate: 120,
 			Padding:  0,
 		},

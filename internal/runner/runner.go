@@ -56,11 +56,17 @@ func Collect(ctx context.Context, claudeJSON []byte, cfg *config.Config) []types
 				return
 			}
 
-			// Build a default cache key early (project/current dir)
+			// Build a cache key early (project/current dir, and optionally a context field)
 			defaultKey := buildDefaultCacheKey(id, ctxObj)
+			key := defaultKey
+			if pcfg.CacheKeyFrom != "" {
+				if v, ok := lookupPath(ctxObj, pcfg.CacheKeyFrom); ok {
+					key = id + "|" + stringify(v)
+				}
+			}
 
 			// Check cache first
-			if seg, found := getCached(defaultKey); found {
+			if seg, found := getCached(key); found {
 				segments <- seg
 				return
 			}
@@ -88,8 +94,7 @@ func Collect(ctx context.Context, claudeJSON []byte, cfg *config.Config) []types
 				seg.Priority = 50 // default priority
 			}
 
-			// Decide cache key and TTL (plugin response wins if provided)
-			key := defaultKey
+			// Allow plugin response to refine the key after run
 			if seg.CacheKey != "" {
 				key = id + "|" + seg.CacheKey
 			}

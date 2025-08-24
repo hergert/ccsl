@@ -66,7 +66,13 @@ func CollectWithDiag(ctx context.Context, claudeJSON []byte, cfg *config.Config)
 
 			// Cache check (same keying as normal Collect)
 			defaultKey := buildDefaultCacheKey(id, ctxObj)
-			if seg, hit := getCached(defaultKey); hit {
+			key := defaultKey
+			if pcfg.CacheKeyFrom != "" {
+				if v, ok := lookupPath(ctxObj, pcfg.CacheKeyFrom); ok {
+					key = id + "|" + stringify(v)
+				}
+			}
+			if seg, hit := getCached(key); hit {
 				diag.CacheHit = true
 				segCh <- seg
 				diagCh <- diag
@@ -116,7 +122,7 @@ func CollectWithDiag(ctx context.Context, claudeJSON []byte, cfg *config.Config)
 			}
 
 			// Cache the result (same precedence: plugin response TTL > config)
-			key := defaultKey
+			// Allow plugin response to refine the key after run
 			if seg.CacheKey != "" {
 				key = id + "|" + seg.CacheKey
 			}

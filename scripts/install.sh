@@ -104,7 +104,7 @@ mkdir -p "$CCSL_CONFIG_DIR"
 if [ ! -f "$CCSL_CONFIG_DIR/config.toml" ]; then
     cat > "$CCSL_CONFIG_DIR/config.toml" << 'EOF'
 [ui]
-template = "{model}  {cwd}  {agent}  {git?prefix=  }{prompt?prefix= — 🗣 }"
+template = "{model}  {cwd}{agent?prefix=  }{git?prefix=  }{prompt?prefix= — 🗣 }"
 truncate = 120
 padding = 0
 
