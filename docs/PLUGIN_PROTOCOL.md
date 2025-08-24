@@ -31,30 +31,37 @@ Plugins receive Claude Code's statusLine JSON on stdin. Example:
 Plugins can return either:
 
 ### Plain Text (Simple)
+
 Just print the segment text and exit 0:
+
 ```bash
 echo "🔥 hot"
 ```
 
 ### Structured JSON (Advanced)
+
 Return a JSON object with full control:
+
 ```json
 {
-  "text": "⚙ main ↑2 ↓1",
-  "style": "dim",
+  "text": "🚀 v1.2.3",
+  "style": "bold",
   "align": "left",
   "priority": 50,
-  "cache_ttl_ms": 800
+  "cache_ttl_ms": 800,
+  "cache_key": "optional-scope-key"
 }
 ```
 
-## Fields
+### Fields
 
-- **text** (required): The segment text to display
+- **text**: The string to be displayed.
 - **style**: "normal", "bold", "dim", or raw ANSI escape codes
-- **align**: "left" or "right" (for future layout features)
-- **priority**: Number for truncation order (higher = keep longer, default 50)
+- **align**: (Optional) `left` or `right`. Default is `left`. (Right alignment is reserved for future use).
+- **priority**: (Optional) A number used for truncation. Higher priority segments are kept. Default is `50`.
 - **cache_ttl_ms**: How long ccsl should cache this result
+- **cache_key**: Optional string to scope the cache (e.g., include transcript path or current commit)
+  If omitted, ccsl scopes by `plugin_id|project_dir|current_dir`.
 
 ## Contract Rules
 
@@ -66,13 +73,13 @@ Return a JSON object with full control:
 
 ## Discovery
 
-Plugins are discovered by:
-1. Executables matching `ccsl-*` on your PATH
-2. Absolute paths specified in config files
+ccsl runs plugins **explicitly listed** in your config under `[plugins].order`.
+Executables starting with `ccsl-` on your PATH are **discoverable** (e.g., via `ccsl list`) but are not executed unless listed in the config.
 
 ## Examples
 
 ### Python with uv
+
 ```python
 #!/usr/bin/env -S uv run --script
 # /// script
@@ -87,6 +94,7 @@ print(json.dumps({"text": "result", "style": "dim"}))
 ```
 
 ### Bash
+
 ```bash
 #!/bin/bash
 cat > /dev/null  # consume stdin
@@ -94,6 +102,7 @@ echo '{"text": "🔋 85%", "priority": 30}'
 ```
 
 ### Go
+
 ```go
 package main
 // ... read from os.Stdin, process, write to os.Stdout
@@ -118,6 +127,7 @@ only_if = "has(cost.total_cost_usd)"
 ## Testing
 
 Test your plugin:
+
 ```bash
 echo '{"model":{"display_name":"Test"}}' | ccsl-myplugin
 ```

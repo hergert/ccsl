@@ -8,33 +8,18 @@ import (
 	"ccsl/internal/types"
 )
 
-// Render extracts and formats the model information
+// Render extracts the model's display name
 func Render(ctx context.Context, ctxObj map[string]any) types.Segment {
-	model, ok := ctxObj["model"].(map[string]any)
-	if !ok {
-		return types.Segment{}
+	text := "Claude" // default
+	if model, ok := ctxObj["model"].(map[string]any); ok {
+		if name, ok := model["display_name"].(string); ok && name != "" {
+			text = strings.TrimSpace(name)
+		}
 	}
-
-	modelID := getStringValue(model, "id")
-	modelName := getStringValue(model, "display_name")
-	
-	if modelName == "" && modelID == "" {
-		return types.Segment{}
-	}
-
-	// Prefer display name, fallback to ID
-	text := modelName
-	if text == "" {
-		text = modelID
-	}
-
-	// If both exist and ID not contained in name, show both
-	if modelID != "" && modelName != "" && !strings.Contains(strings.ToLower(modelName), strings.ToLower(modelID)) {
-		text = modelName + " (" + modelID + ")"
-	}
-
 	icon := ""
-	if palette.IconsEnabled(ctx) { icon = "🤖 " }
+	if palette.IconsEnabled(ctx) {
+		icon = "🤖 "
+	}
 	return types.Segment{
 		Text:     icon + text,
 		Style:    "bold",

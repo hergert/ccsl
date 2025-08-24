@@ -3,16 +3,17 @@ package config
 import (
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/BurntSushi/toml"
 )
 
 type Config struct {
-	UI      UIConfig         `toml:"ui"`
-	Theme   ThemeConfig      `toml:"theme"`
-	Plugins PluginsConfig    `toml:"plugins"`
+	UI      UIConfig                `toml:"ui"`
+	Theme   ThemeConfig             `toml:"theme"`
+	Plugins PluginsConfig           `toml:"plugins"`
 	Plugin  map[string]PluginConfig `toml:"plugin"`
-	Limits  LimitsConfig     `toml:"limits"`
+	Limits  LimitsConfig            `toml:"limits"`
 }
 
 type UIConfig struct {
@@ -22,7 +23,7 @@ type UIConfig struct {
 }
 
 type ThemeConfig struct {
-	Mode  string `toml:"mode"`  // auto | light | dark
+	Mode  string `toml:"mode"` // auto | light | dark
 	Icons bool   `toml:"icons"`
 	ANSI  bool   `toml:"ansi"`
 }
@@ -32,12 +33,13 @@ type PluginsConfig struct {
 }
 
 type PluginConfig struct {
-	Type        string `toml:"type"`         // builtin | exec
-	Command     string `toml:"command"`      // for exec type
-	Style       string `toml:"style"`        // normal | bold | dim
-	TimeoutMS   int    `toml:"timeout_ms"`
-	CacheTTLMS  int    `toml:"cache_ttl_ms"`
-	OnlyIf      string `toml:"only_if"`      // simple condition
+	Type       string   `toml:"type"`    // builtin | exec
+	Command    string   `toml:"command"` // for exec type
+	Args       []string `toml:"args"`
+	Style      string   `toml:"style"` // normal | bold | dim
+	TimeoutMS  int      `toml:"timeout_ms"`
+	CacheTTLMS int      `toml:"cache_ttl_ms"`
+	OnlyIf     string   `toml:"only_if"` // simple condition
 }
 
 type LimitsConfig struct {
@@ -48,13 +50,13 @@ type LimitsConfig struct {
 // Load reads configuration from standard locations with env overrides
 func Load() *Config {
 	cfg := defaultConfig()
-	
+
 	// Try loading from config files
 	configPaths := []string{
 		filepath.Join(os.Getenv("HOME"), ".config", "ccsl", "config.toml"),
 		filepath.Join(os.Getenv("HOME"), ".claude", "ccsl.toml"),
 	}
-	
+
 	for _, path := range configPaths {
 		if data, err := os.ReadFile(path); err == nil {
 			if _, err := toml.Decode(string(data), cfg); err == nil {
@@ -62,19 +64,47 @@ func Load() *Config {
 			}
 		}
 	}
-	
-	// Apply environment variable overrides
-	// NOTE: CCSL_PROMPT_MAX belongs to the prompt segment, not UI.Truncate.
-	// Leave it for the prompt builtin to read.
-	
-	if val := os.Getenv("CCSL_ANSI"); val != "" {
-		cfg.Theme.ANSI = val != "0" && val != "false"
+
+	// NOTE: CCSL_PROMPT_MAX belongs to the prompt segment and is read in the
+	// prompt builtin, not here.
+
+	// Apply simple overrides last
+	if val := os.Getenv("CCSL_ANSI"); val == "0" {
+		cfg.Theme.ANSI = false
 	}
-	
-	if val := os.Getenv("CCSL_ICONS"); val != "" {
-		cfg.Theme.Icons = val != "0" && val != "false"
+
+	if val := os.Getenv("CCSL_ICONS"); val == "0" {
+		cfg.Theme.Icons = false
 	}
-	
+
+	if v := os.Getenv("CCSL_TEMPLATE"); v != "" {
+		cfg.UI.Template = v
+	}
+	if v := os.Getenv("CCSL_ORDER"); v != "" {
+		parts := strings.Split(v, ",")
+		for i := range parts {
+			parts[i] = strings.TrimSpace(parts[i])
+		}
+		cfg.Plugins.Order = parts
+	}
+	if v := os.Getenv("CCSL_THEME"); v != "" {
+		cfg.Theme.Mode = v
+	} // auto|light|dark
+	// CCSL_DISABLE: comma-separated segments to drop
+	if v := os.Getenv("CCSL_DISABLE"); v != "" {
+		drop := map[string]bool{}
+		for _, s := range strings.Split(v, ",") {
+			drop[strings.TrimSpace(s)] = true
+		}
+		filtered := make([]string, 0, len(cfg.Plugins.Order))
+		for _, id := range cfg.Plugins.Order {
+			if !drop[id] {
+				filtered = append(filtered, id)
+			}
+		}
+		cfg.Plugins.Order = filtered
+	}
+
 	return cfg
 }
 

@@ -32,7 +32,8 @@ def main():
             "text": text,
             "style": "dim",
             "priority": 40,
-            "cache_ttl_ms": 1500
+            "cache_ttl_ms": 1500,
+            "cache_key": data.get("transcript_path", "")
         }
         
         print(json.dumps(response))
