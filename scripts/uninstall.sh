@@ -28,11 +28,12 @@ fi
 # Remove statusLine config from Claude settings
 if [ -f "$SETTINGS_FILE" ]; then
     print_info "Removing statusLine config from Claude settings..."
-    python3 << 'EOF'
+    SETTINGS_FILE_PATH="$SETTINGS_FILE" python3 << 'EOF'
 import json
+import os
 import sys
 
-settings_file = sys.argv[1] if len(sys.argv) > 1 else ""
+settings_file = os.environ.get("SETTINGS_FILE_PATH")
 
 try:
     with open(settings_file, 'r') as f:
@@ -49,7 +50,7 @@ try:
         
 except Exception as e:
     print(f"Error updating settings: {e}")
-EOF "$SETTINGS_FILE"
+EOF
 fi
 
 print_warning "Config files in ~/.config/ccsl/ were left intact"
