@@ -13,7 +13,7 @@ import (
 // Render reads the active agent from .claude/state.json
 func Render(ctx context.Context, ctxObj map[string]any) types.Segment {
 	agent := "main" // default
-	
+
 	// Try to get project directory from Claude context
 	var projectDir string
 	if workspace, ok := ctxObj["workspace"].(map[string]any); ok {
@@ -23,17 +23,19 @@ func Render(ctx context.Context, ctxObj map[string]any) types.Segment {
 			projectDir = dir
 		}
 	}
-	
+
 	// Fallback to current working directory
 	if projectDir == "" {
 		if dir, err := os.Getwd(); err == nil {
 			projectDir = dir
 		}
 	}
-	
+
 	if projectDir == "" {
 		icon := ""
-		if palette.IconsEnabled(ctx) { icon = "⚙ " }
+		if palette.IconsEnabled(ctx) {
+			icon = "⚙ "
+		}
 		return types.Segment{
 			Text:     icon + agent,
 			Priority: 70,
@@ -51,8 +53,15 @@ func Render(ctx context.Context, ctxObj map[string]any) types.Segment {
 		}
 	}
 
+	// Don't show anything if agent is "main" to avoid confusion with git branch
+	if agent == "main" {
+		return types.Segment{}
+	}
+
 	icon := ""
-	if palette.IconsEnabled(ctx) { icon = "⚙ " }
+	if palette.IconsEnabled(ctx) {
+		icon = "⚙ "
+	}
 	return types.Segment{
 		Text:     icon + agent,
 		Priority: 70,
