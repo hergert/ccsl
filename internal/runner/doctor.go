@@ -180,7 +180,7 @@ func effTimeoutMS(pcfg config.PluginConfig, cfg *config.Config) int {
 // Copy of runExec with error surfaced for diagnostics; keeps stdout size bounded.
 func runExecWithErr(ctx context.Context, pcfg config.PluginConfig, claudeJSON []byte) (types.Segment, error) {
 	cmd := exec.CommandContext(ctx, pcfg.Command, pcfg.Args...)
-	cmd.Stdin = strings.NewReader(string(claudeJSON))
+	cmd.Stdin = bytes.NewReader(claudeJSON)
 	var buf bytes.Buffer
 	cmd.Stdout = &limitedWriter{w: &buf, n: 4096}
 	cmd.Stderr = io.Discard
@@ -189,9 +189,14 @@ func runExecWithErr(ctx context.Context, pcfg config.PluginConfig, claudeJSON []
 		return types.Segment{}, err
 	}
 
-	result := strings.TrimSpace(buf.String())
-	if result == "" {
+	raw := strings.TrimSpace(buf.String())
+	if raw == "" {
 		return types.Segment{}, nil
+	}
+	// Keep only the first line; ignore trailing noise or accidental logs.
+	result := raw
+	if i := strings.IndexByte(raw, '\n'); i >= 0 {
+		result = raw[:i]
 	}
 
 	var resp types.PluginResponse

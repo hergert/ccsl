@@ -53,8 +53,12 @@ func Load() *Config {
 	cfg := defaultConfig()
 
 	// Try loading from config files
+	xdg := os.Getenv("XDG_CONFIG_HOME")
+	if xdg == "" {
+		xdg = filepath.Join(os.Getenv("HOME"), ".config")
+	}
 	configPaths := []string{
-		filepath.Join(os.Getenv("HOME"), ".config", "ccsl", "config.toml"),
+		filepath.Join(xdg, "ccsl", "config.toml"),
 		filepath.Join(os.Getenv("HOME"), ".claude", "ccsl.toml"),
 	}
 

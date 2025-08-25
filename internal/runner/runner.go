@@ -146,7 +146,7 @@ func runBuiltin(ctx context.Context, id string, ctxObj map[string]any) types.Seg
 
 func runExec(ctx context.Context, pcfg config.PluginConfig, claudeJSON []byte) types.Segment {
 	cmd := exec.CommandContext(ctx, pcfg.Command, pcfg.Args...)
-	cmd.Stdin = strings.NewReader(string(claudeJSON))
+	cmd.Stdin = bytes.NewReader(claudeJSON)
 	// Limit stdout to 4KB
 	var buf bytes.Buffer
 	cmd.Stdout = &limitedWriter{w: &buf, n: 4096}
@@ -156,9 +156,14 @@ func runExec(ctx context.Context, pcfg config.PluginConfig, claudeJSON []byte) t
 		return types.Segment{} // silent failure
 	}
 
-	result := strings.TrimSpace(buf.String())
-	if result == "" {
+	raw := strings.TrimSpace(buf.String())
+	if raw == "" {
 		return types.Segment{}
+	}
+	// Keep only the first line; ignore trailing noise or accidental logs.
+	result := raw
+	if i := strings.IndexByte(raw, '\n'); i >= 0 {
+		result = raw[:i]
 	}
 
 	// Try to parse as JSON first
@@ -223,13 +228,20 @@ type limitedWriter struct {
 }
 
 func (l *limitedWriter) Write(p []byte) (int, error) {
-	if l.written >= l.n {
-		return 0, io.EOF
+	// Remaining capacity to store
+	remain := l.n - l.written
+	if remain <= 0 {
+		// Discard but *pretend* we consumed everything to keep draining.
+		l.written += int64(len(p))
+		return len(p), nil
 	}
-	if int64(len(p)) > l.n-l.written {
-		p = p[:l.n-l.written]
+	if int64(len(p)) <= remain {
+		n, err := l.w.Write(p)
+		l.written += int64(n)
+		return n, err
 	}
-	n, err := l.w.Write(p)
+	// Write up to remain, then discard the rest but report full consumption.
+	n, err := l.w.Write(p[:remain])
 	l.written += int64(n)
-	return n, err
+	return len(p), err
 }

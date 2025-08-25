@@ -90,6 +90,15 @@ fi
 # Make sure binary is executable
 chmod +x "$BINARY_PATH"
 
+# Build ccusage connector (optional plugin)
+print_info "Building ccsl-ccusage connector..."
+if go build -o "$INSTALL_DIR/ccsl-ccusage" ./cmd/ccsl-ccusage; then
+    chmod +x "$INSTALL_DIR/ccsl-ccusage"
+    print_success "Built ccsl-ccusage connector at $INSTALL_DIR/ccsl-ccusage"
+else
+    print_warning "Skipped building ccsl-ccusage (optional). You can build later with 'make build-plugins'."
+fi
+
 # Check if install directory is in PATH
 if [[ ":$PATH:" != *":$INSTALL_DIR:"* ]]; then
     print_warning "$INSTALL_DIR is not in your PATH"
@@ -125,14 +134,6 @@ cache_ttl_ms = 300
 [limits]
 per_plugin_timeout_ms = 120
 total_budget_ms = 220
-
-# Optional: Enable usage & cost tracking (requires bun or node)
-# Add "ccusage" to [plugins].order above to enable
-# [plugin.ccusage]
-# type = "exec"
-# command = "ccsl-ccusage"
-# timeout_ms = 250
-# cache_ttl_ms = 1500
 EOF
     print_success "Created default config at $CCSL_CONFIG_DIR/config.toml"
 fi
@@ -195,8 +196,20 @@ echo '{"model":{"display_name":"Test"},"workspace":{"current_dir":"'$(pwd)'"}}' 
 
 if [ $? -eq 0 ]; then
     print_success "ccsl installed successfully!"
-    print_info "Restart Claude Code to see the new status bar."
     print_info "Config location: $CCSL_CONFIG_DIR/config.toml"
+
+    # Offer optional setup wizard only if TTY
+    if [ -t 0 ] && [ -t 1 ]; then
+        echo
+        read -r -p "Run ccsl setup to enable optional segments now? [y/N] " yn
+        if [[ "$yn" =~ ^[Yy]$ ]]; then
+            "$BINARY_PATH" setup --ask || true
+        else
+            print_info "You can run it anytime: ccsl setup --ask"
+        fi
+    fi
+    
+    print_info "Restart Claude Code to see the new status bar."
 else
     print_error "Installation test failed. Check the ccsl binary."
     exit 1

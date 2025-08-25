@@ -18,10 +18,16 @@ import (
 )
 
 func main() {
-	// Subcommand: ccsl doctor [...]
-	if len(os.Args) > 1 && os.Args[1] == "doctor" {
-		runDoctor(os.Args[2:])
-		return
+	// Subcommands
+	if len(os.Args) > 1 {
+		switch os.Args[1] {
+		case "setup":
+			runSetup()
+			return
+		case "doctor":
+			runDoctor(os.Args[2:])
+			return
+		}
 	}
 
 	// Default mode: read Claude JSON on stdin and print one line

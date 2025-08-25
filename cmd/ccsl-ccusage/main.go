@@ -4,10 +4,10 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"fmt"
 	"io"
 	"os"
 	"os/exec"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -24,14 +24,19 @@ func main() {
 	// Read the Claude Code statusline JSON from stdin (pass through to ccusage)
 	raw, _ := io.ReadAll(os.Stdin)
 
+	// Extra, tight timeout on the connector
+	timeoutMS := getenvInt("CCSL_CCUSAGE_TIMEOUT_MS", 250)
+	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(timeoutMS)*time.Millisecond)
+	defer cancel()
+
 	// Choose runner: bun x ccusage -> npx -y ccusage -> ccusage
 	var cmd *exec.Cmd
 	if has("bun") {
-		cmd = exec.Command("bun", append([]string{"x", "ccusage", "statusline"}, extraArgs()...)...)
+		cmd = exec.CommandContext(ctx, "bun", append([]string{"x", "ccusage", "statusline"}, extraArgs()...)...)
 	} else if has("npx") {
-		cmd = exec.Command("npx", append([]string{"-y", "ccusage", "statusline"}, extraArgs()...)...)
+		cmd = exec.CommandContext(ctx, "npx", append([]string{"-y", "ccusage", "statusline"}, extraArgs()...)...)
 	} else if has("ccusage") {
-		cmd = exec.Command("ccusage", append([]string{"statusline"}, extraArgs()...)...)
+		cmd = exec.CommandContext(ctx, "ccusage", append([]string{"statusline"}, extraArgs()...)...)
 	} else {
 		// Silent failure per ccsl plugin contract
 		return
@@ -55,11 +60,7 @@ func main() {
 	cmd.Stdout = &buf
 	cmd.Stderr = io.Discard
 
-	// Extra, tight timeout on the connector
-	timeoutMS := getenvInt("CCSL_CCUSAGE_TIMEOUT_MS", 250)
-	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(timeoutMS)*time.Millisecond)
-	defer cancel()
-	if err := cmd.RunContext(ctx); err != nil {
+	if err := cmd.Run(); err != nil {
 		return // silent
 	}
 
@@ -84,10 +85,12 @@ func has(bin string) bool {
 }
 
 func getenvInt(k string, def int) int {
-	if v := os.Getenv(k); v != "" {
-		if n, err := fmt.Sscanf(v, "%d", &def); n == 1 && err == nil {
-			return def
-		}
+	v := strings.TrimSpace(os.Getenv(k))
+	if v == "" {
+		return def
+	}
+	if n, err := strconv.Atoi(v); err == nil {
+		return n
 	}
 	return def
 }

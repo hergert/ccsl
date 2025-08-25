@@ -40,3 +40,5 @@ help:
 	@echo "  uninstall     - Uninstall ccsl"
 	@echo "  demo          - Run demo with sample data"
 	@echo "  help          - Show this help message"
+	@echo ""
+	@echo "After install, run 'ccsl setup --ask' to enable optional plugins"

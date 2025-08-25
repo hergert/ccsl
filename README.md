@@ -163,6 +163,16 @@ misconfigured plugins quickly.
 
 ## Optional: usage & cost (powered by ccusage)
 
+### Quick setup (interactive)
+
+```bash
+ccsl setup --ask
+```
+
+This interactive wizard will help you enable the ccusage segment.
+
+### Manual setup
+
 1. Install a JS runtime: `bun` (recommended) or `node` (for npx).
 
 2. Enable the plugin in `~/.config/ccsl/config.toml`:
@@ -178,7 +188,21 @@ timeout_ms = 250
 cache_ttl_ms = 1500
 ```
 
-3. (Optional) Environment tweaks:
+3. Restart Claude Code.
+
+### Headless setup
+
+For CI/automation:
+
+```bash
+ccsl setup \
+  --enable-ccusage \
+  --ccusage-token-limit=max \
+  --position=after:git \
+  --non-interactive
+```
+
+### Environment tweaks
 
 ```bash
 # monochrome (matches ccsl ANSI off)
@@ -190,8 +214,6 @@ export CCSL_CCUSAGE_BURN=emoji
 # track block % against your historical max
 export CCSL_CCUSAGE_TOKEN_LIMIT=max
 ```
-
-4. Restart Claude Code.
 
 **Credits**: Usage metrics are provided by [ccusage](https://ccusage.com) (MIT), © 2024 ryoppippi. See their [docs](https://github.com/ryoppippi/ccusage) for details & flags.
 
