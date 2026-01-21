@@ -62,8 +62,10 @@ func TestConfigLoading(t *testing.T) {
 		t.Fatal("Config should not be nil")
 	}
 
-	if len(cfg.Plugins.Order) == 0 {
-		t.Error("Expected default plugin order")
+	// Order can be nil (derive from template) or explicit
+	// Just verify we have a valid template to derive from
+	if cfg.UI.Template == "" && len(cfg.Plugins.Order) == 0 {
+		t.Error("Expected either template or explicit plugin order")
 	}
 
 	if cfg.UI.Template == "" {

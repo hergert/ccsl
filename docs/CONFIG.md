@@ -2,7 +2,7 @@
 
 ## Config File Location
 
-ccsl looks for configuration in these locations (in order):
+ccsl looks for configuration in order:
 
 1. `~/.config/ccsl/config.toml`
 2. `~/.claude/ccsl.toml`
@@ -11,85 +11,55 @@ ccsl looks for configuration in these locations (in order):
 
 ```toml
 [ui]
-template = "{model}  {cwd}{agent?prefix=  }{git?prefix=  }{prompt?prefix= — 🗣 }"
+template = "{model} {cwd}{git?prefix= }{ctx?prefix= }{cost?prefix= }"
 truncate = 120
-padding = 0
 
 [theme]
-mode = "auto"    # auto | light | dark
 icons = true
 ansi = true
 
-[plugins]
-order = ["model", "cwd", "agent", "git", "prompt"]
-
-# Built-in configurations
 [plugin.model]
-type = "builtin"
 timeout_ms = 10
 
 [plugin.cwd]
-type = "builtin"
 timeout_ms = 10
 
-[plugin.agent]
-type = "builtin"
-timeout_ms = 20
-cache_ttl_ms = 100
-
 [plugin.git]
-type = "builtin"
-style = "dim"
-timeout_ms = 90
-cache_ttl_ms = 300
-
-[plugin.prompt]
-type = "builtin"
-timeout_ms = 30
-cache_ttl_ms = 50
-
-# External plugin example
-[plugin.cost]
-type = "exec"
-command = "ccsl-cost"
 timeout_ms = 80
-cache_ttl_ms = 500
-cache_key_from = "transcript_path"
-only_if = "has(cost.total_cost_usd)"
+
+[plugin.ctx]
+timeout_ms = 10
+
+[plugin.cost]
+timeout_ms = 10
 
 [limits]
-per_plugin_timeout_ms = 120
-total_budget_ms = 220
+per_plugin_timeout_ms = 100
+total_budget_ms = 200
 ```
 
 ## Configuration Sections
 
 ### [ui]
 
-- **template**: Template string with `{segment}` placeholders
+- **template**: Template string with `{segment}` placeholders. Segments are derived from this.
 - **truncate**: Maximum line length before truncation
-- **padding**: Claude Code statusLine padding
 
 ### [theme]
 
-- **mode**: Color theme mode
 - **icons**: Enable/disable emoji icons
 - **ansi**: Enable/disable ANSI styling
 
 ### [plugins]
 
-- **order**: List of plugins in display order
+- **order**: Optional explicit segment order (if omitted, derived from template)
 
 ### [plugin.NAME]
 
 - **type**: "builtin" or "exec"
 - **command**: Command to execute (for exec type)
 - **args**: Command arguments array (for exec type)
-- **style**: Default styling ("normal", "bold", "dim")
 - **timeout_ms**: Plugin-specific timeout
-- **cache_ttl_ms**: Cache duration in milliseconds
-- **cache_key_from**: Dot path in context for cache key (e.g., "transcript_path")
-- **only_if**: Condition to run plugin (simple expressions)
 
 ### [limits]
 
@@ -101,28 +71,26 @@ total_budget_ms = 220
 Templates use `{segment}` placeholders with optional modifiers:
 
 ```toml
-template = "{model}  {cwd}{agent?prefix=  }{git?prefix=  }{prompt?prefix= — 🗣 }"
+template = "{model} {cwd}{git?prefix= }{ctx?prefix= }{cost?prefix= }"
 ```
 
 Modifiers:
-
-- `?prefix=TEXT`: Add prefix only if segment exists
-- `?suffix=TEXT`: Add suffix only if segment exists
+- `?prefix=TEXT`: Add prefix only if segment has content
+- `?suffix=TEXT`: Add suffix only if segment has content
 
 ## Environment Variables
 
-Override config with environment variables:
+- `CCSL_TEMPLATE`: Override template
+- `CCSL_ORDER`: Comma-separated segment order (e.g., `model,cwd,git`)
+- `CCSL_ANSI`: Enable/disable ANSI (`0` or `1`)
+- `CCSL_ICONS`: Enable/disable icons (`0` or `1`)
 
-- `CCSL_PROMPT_MAX`: Override prompt truncation length
-- `CCSL_ANSI`: Enable/disable ANSI (0/1)
-- `CCSL_ICONS`: Enable/disable icons (0/1)
+## Built-in Segments
 
-## Profiles (Future)
-
-```toml
-[profile.minimal]
-plugins = ["model", "cwd"]
-
-[profile.rich]
-plugins = ["model", "cwd", "agent", "git", "cost", "uptime", "prompt"]
-```
+| Segment | Description                        |
+|---------|------------------------------------|
+| model   | Model display name with icon       |
+| cwd     | Current directory basename         |
+| git     | Branch, dirty flag, ahead/behind   |
+| ctx     | Context window usage percentage    |
+| cost    | Session cost in USD                |
