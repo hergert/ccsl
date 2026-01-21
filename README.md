@@ -34,15 +34,30 @@ curl -fsSL https://raw.githubusercontent.com/hergert/ccsl/main/scripts/uninstall
 
 ## Config
 
-`~/.config/ccsl/config.toml`
+`~/.config/ccsl/config.toml` or `.claude/ccsl.toml` (project-local)
 
+**Default:**
 ```toml
 [ui]
 template = "{model}{ctx?prefix= }{cost?prefix= } {cwd}{git?prefix=:}{gcp?prefix= }{cf?prefix= }"
-truncate = 120
+```
 
-[limits]
-total_budget_ms = 200
+**Minimal:**
+```toml
+[ui]
+template = "{model} {cwd}{git?prefix=:}"
+```
+
+**Show untracked files** (slower):
+```toml
+[plugin.git]
+untracked = true
+```
+
+**Plain text** (no colors):
+```toml
+[theme]
+ansi = false
 ```
 
 ## Template
