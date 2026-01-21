@@ -22,6 +22,28 @@ import (
 	"ccsl/internal/types"
 )
 
+const maxPluginStdout = 4096 // 4KiB cap for exec plugin stdout
+
+// limitedWriter wraps an io.Writer with a byte limit
+type limitedWriter struct {
+	w     io.Writer
+	n     int // bytes remaining
+	wrote int // bytes written
+}
+
+func (l *limitedWriter) Write(p []byte) (int, error) {
+	if l.n <= 0 {
+		return len(p), nil // silently discard
+	}
+	if len(p) > l.n {
+		p = p[:l.n]
+	}
+	n, err := l.w.Write(p)
+	l.n -= n
+	l.wrote += n
+	return n, err
+}
+
 var segmentRe = regexp.MustCompile(`\{([-\w:.]+)`)
 
 // ParseSegments extracts segment IDs from a template string
@@ -40,9 +62,7 @@ func ParseSegments(template string) []string {
 }
 
 // Collect runs segments derived from template in parallel
-func Collect(ctx context.Context, claudeJSON []byte, cfg *config.Config) []types.Segment {
-	var ctxObj map[string]any
-	_ = json.Unmarshal(claudeJSON, &ctxObj)
+func Collect(ctx context.Context, ctxObj map[string]any, claudeJSON []byte, cfg *config.Config) []types.Segment {
 
 	// Derive segments from template (or use explicit order if set)
 	segmentIDs := cfg.Plugins.Order
@@ -122,7 +142,8 @@ func runExec(ctx context.Context, pcfg config.PluginConfig, claudeJSON []byte) t
 	cmd := exec.CommandContext(ctx, pcfg.Command, pcfg.Args...)
 	cmd.Stdin = bytes.NewReader(claudeJSON)
 	var buf bytes.Buffer
-	cmd.Stdout = &buf
+	lw := &limitedWriter{w: &buf, n: maxPluginStdout}
+	cmd.Stdout = lw
 	cmd.Stderr = io.Discard
 
 	if err := cmd.Run(); err != nil {

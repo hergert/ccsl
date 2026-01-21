@@ -7,29 +7,31 @@ import (
 	"path/filepath"
 	"strings"
 
-	"ccsl/internal/palette"
 	"ccsl/internal/types"
 )
 
 // Render returns GCP identity + project from env vars and gcloud config files.
 // No subprocess spawning - reads config files directly for speed.
 func Render(ctx context.Context, ctxObj map[string]any) types.Segment {
-	account := os.Getenv("CLOUDSDK_CORE_ACCOUNT")
-	project := os.Getenv("CLOUDSDK_CORE_PROJECT")
-	configName := os.Getenv("CLOUDSDK_ACTIVE_CONFIG_NAME")
+	envAccount := os.Getenv("CLOUDSDK_CORE_ACCOUNT")
+	envProject := os.Getenv("CLOUDSDK_CORE_PROJECT")
+	envConfigName := os.Getenv("CLOUDSDK_ACTIVE_CONFIG_NAME")
 
-	// If not fully specified via env, read from config files
-	if account == "" || project == "" {
-		fileAccount, fileProject, fileName := readGcloudConfig()
-		if account == "" {
-			account = fileAccount
-		}
-		if project == "" {
-			project = fileProject
-		}
-		if configName == "" {
-			configName = fileName
-		}
+	// Read from config files
+	fileAccount, fileProject, fileName, configCount := readGcloudConfig()
+
+	// Determine effective values
+	account := envAccount
+	if account == "" {
+		account = fileAccount
+	}
+	project := envProject
+	if project == "" {
+		project = fileProject
+	}
+	configName := envConfigName
+	if configName == "" {
+		configName = fileName
 	}
 
 	// Nothing to show
@@ -37,30 +39,28 @@ func Render(ctx context.Context, ctxObj map[string]any) types.Segment {
 		return types.Segment{}
 	}
 
-	// Build output
-	var parts []string
-
-	if account != "" {
-		parts = append(parts, shortenEmail(account))
+	// Check for mismatch (env vars override file config)
+	mismatch := false
+	if (envAccount != "" && fileAccount != "" && envAccount != fileAccount) ||
+		(envProject != "" && fileProject != "" && envProject != fileProject) {
+		mismatch = true
 	}
+
+	// Build compact output: gcp:project or gcp:project@config
+	text := "gcp:"
 	if project != "" {
-		if len(parts) > 0 {
-			parts = append(parts, "/", project)
-		} else {
-			parts = append(parts, project)
-		}
+		text += project
+	} else if account != "" {
+		text += shortenEmail(account)
 	}
 
-	text := strings.Join(parts, " ")
-
-	// Add config name if not default
-	if configName != "" && configName != "default" {
-		text += " (" + configName + ")"
+	// Show config name if multiple configs or non-default
+	if configCount > 1 || (configName != "" && configName != "default") {
+		text += "@" + configName
 	}
 
-	// Add icon if enabled
-	if palette.IconsEnabled(ctx) {
-		text = "☁️ " + text
+	if mismatch {
+		text += "⚠"
 	}
 
 	return types.Segment{
@@ -71,7 +71,7 @@ func Render(ctx context.Context, ctxObj map[string]any) types.Segment {
 }
 
 // readGcloudConfig reads the active gcloud configuration from disk
-func readGcloudConfig() (account, project, configName string) {
+func readGcloudConfig() (account, project, configName string, configCount int) {
 	configDir := os.Getenv("CLOUDSDK_CONFIG")
 	if configDir == "" {
 		home, err := os.UserHomeDir()
@@ -79,6 +79,16 @@ func readGcloudConfig() (account, project, configName string) {
 			return
 		}
 		configDir = filepath.Join(home, ".config", "gcloud")
+	}
+
+	// Count configurations
+	configsDir := filepath.Join(configDir, "configurations")
+	if entries, err := os.ReadDir(configsDir); err == nil {
+		for _, e := range entries {
+			if strings.HasPrefix(e.Name(), "config_") {
+				configCount++
+			}
+		}
 	}
 
 	// Determine active config name
@@ -95,7 +105,7 @@ func readGcloudConfig() (account, project, configName string) {
 	}
 
 	// Read the config file
-	configPath := filepath.Join(configDir, "configurations", "config_"+configName)
+	configPath := filepath.Join(configsDir, "config_"+configName)
 	account, project = parseGcloudConfig(configPath)
 
 	return

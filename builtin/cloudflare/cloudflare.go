@@ -7,7 +7,6 @@ import (
 	"path/filepath"
 	"strings"
 
-	"ccsl/internal/palette"
 	"ccsl/internal/types"
 
 	"github.com/BurntSushi/toml"
@@ -15,79 +14,73 @@ import (
 
 // wranglerConfig holds relevant fields from wrangler.toml/json
 type wranglerConfig struct {
+	Name      string                    `json:"name" toml:"name"`
+	AccountID string                    `json:"account_id" toml:"account_id"`
+	Env       map[string]wranglerEnvCfg `json:"env" toml:"env"`
+}
+
+type wranglerEnvCfg struct {
 	Name      string `json:"name" toml:"name"`
 	AccountID string `json:"account_id" toml:"account_id"`
 }
 
 // Render returns Cloudflare account/project info from env vars and wrangler config.
-// No subprocess spawning - reads config files directly for speed.
 func Render(ctx context.Context, ctxObj map[string]any) types.Segment {
-	// Get workspace directory from Claude's context
-	workDir := ""
+	// Get workspace directories from Claude's context
+	var currentDir, projectDir string
 	if ws, ok := ctxObj["workspace"].(map[string]any); ok {
 		if dir, ok := ws["current_dir"].(string); ok {
-			workDir = dir
+			currentDir = dir
+		}
+		if dir, ok := ws["project_dir"].(string); ok {
+			projectDir = dir
 		}
 	}
 
-	// Read from environment
-	envAccountID := getEnvAccountID()
+	// Find nearest wrangler config (walk current_dir → project_dir)
+	cfg, configDir := findWranglerConfig(currentDir, projectDir)
+
+	// Resolve env
 	envName := os.Getenv("CLOUDFLARE_ENV")
 
-	// Read from wrangler config in workspace
-	var cfg wranglerConfig
-	if workDir != "" {
-		cfg = findWranglerConfig(workDir)
+	// Apply env-specific overrides from config
+	if envName != "" && cfg.Env != nil {
+		if envCfg, ok := cfg.Env[envName]; ok {
+			if envCfg.Name != "" {
+				cfg.Name = envCfg.Name
+			}
+			if envCfg.AccountID != "" {
+				cfg.AccountID = envCfg.AccountID
+			}
+		}
 	}
 
-	// Determine what to show
-	accountID := envAccountID
-	if accountID == "" {
-		accountID = cfg.AccountID
-	}
+	// Resolve account ID (priority order)
+	accountID := resolveAccountID(configDir, cfg.AccountID)
 
 	projectName := cfg.Name
 
-	// Nothing to show if no account and no project
-	if accountID == "" && projectName == "" {
+	// Nothing to show if no project
+	if projectName == "" {
 		return types.Segment{}
 	}
 
-	// Build output
-	var parts []string
+	// Build compact output: cf:project or cf:project@env
+	text := "cf:" + projectName
 
-	if accountID != "" {
-		parts = append(parts, shortenAccountID(accountID))
-	}
-
-	if projectName != "" {
-		if len(parts) > 0 {
-			parts = append(parts, "/", projectName)
-		} else {
-			parts = append(parts, projectName)
-		}
-	}
-
-	text := strings.Join(parts, " ")
-
-	// Add env suffix if set
 	if envName != "" {
-		text += " @" + envName
+		text += "@" + envName
 	}
 
-	// Check for account mismatch (env vs config) - common failure mode
-	mismatch := false
+	// Check for mismatch between process env and config
+	envAccountID := getEnvAccountID()
 	if envAccountID != "" && cfg.AccountID != "" && envAccountID != cfg.AccountID {
-		mismatch = true
+		text += "⚠"
 	}
 
-	if mismatch {
-		text += " ⚠"
-	}
-
-	// Add icon if enabled
-	if palette.IconsEnabled(ctx) {
-		text = "☁️ " + text
+	// If we have account but no project, show shortened account
+	if projectName == "" && accountID != "" {
+		text = "cf:" + shortenAccountID(accountID)
 	}
 
 	return types.Segment{
@@ -97,45 +90,77 @@ func Render(ctx context.Context, ctxObj map[string]any) types.Segment {
 	}
 }
 
+// resolveAccountID resolves account ID (no .env reading for security)
+func resolveAccountID(configDir, configAccountID string) string {
+	// 1. Process env var
+	if id := getEnvAccountID(); id != "" {
+		return id
+	}
+
+	// 2. Config file account_id
+	if configAccountID != "" {
+		return configAccountID
+	}
+
+	// 3. Wrangler account cache (non-secret metadata)
+	if configDir != "" {
+		if id := readWranglerAccountCache(configDir); id != "" {
+			return id
+		}
+	}
+
+	return ""
+}
+
 // getEnvAccountID checks both new and deprecated env var names
 func getEnvAccountID() string {
 	if id := os.Getenv("CLOUDFLARE_ACCOUNT_ID"); id != "" {
 		return id
 	}
-	// Deprecated but still supported
 	return os.Getenv("CF_ACCOUNT_ID")
 }
 
-// findWranglerConfig looks for wrangler config in the workspace
-func findWranglerConfig(workDir string) wranglerConfig {
-	// Check for .wrangler/deploy/config.json redirect first
-	redirectPath := filepath.Join(workDir, ".wrangler", "deploy", "config.json")
-	if data, err := os.ReadFile(redirectPath); err == nil {
-		var redirect struct {
-			ConfigPath string `json:"configPath"`
-		}
-		if json.Unmarshal(data, &redirect) == nil && redirect.ConfigPath != "" {
-			if cfg := parseWranglerConfig(filepath.Join(workDir, redirect.ConfigPath)); cfg.Name != "" {
-				return cfg
+// findWranglerConfig walks from currentDir up to projectDir looking for wrangler config
+// Returns the config and the directory where it was found
+func findWranglerConfig(currentDir, projectDir string) (wranglerConfig, string) {
+	candidates := []string{"wrangler.toml", "wrangler.json", "wrangler.jsonc"}
+
+	dir := currentDir
+	for {
+		// Check for .wrangler/deploy/config.json redirect first
+		redirectPath := filepath.Join(dir, ".wrangler", "deploy", "config.json")
+		if data, err := os.ReadFile(redirectPath); err == nil {
+			var redirect struct {
+				ConfigPath string `json:"configPath"`
+			}
+			if json.Unmarshal(data, &redirect) == nil && redirect.ConfigPath != "" {
+				cfgPath := filepath.Join(dir, redirect.ConfigPath)
+				if cfg := parseWranglerConfig(cfgPath); cfg.Name != "" {
+					return cfg, filepath.Dir(cfgPath)
+				}
 			}
 		}
-	}
 
-	// Try standard config file names
-	candidates := []string{
-		"wrangler.toml",
-		"wrangler.json",
-		"wrangler.jsonc",
-	}
-
-	for _, name := range candidates {
-		path := filepath.Join(workDir, name)
-		if cfg := parseWranglerConfig(path); cfg.Name != "" || cfg.AccountID != "" {
-			return cfg
+		// Try standard config file names
+		for _, name := range candidates {
+			path := filepath.Join(dir, name)
+			if cfg := parseWranglerConfig(path); cfg.Name != "" || cfg.AccountID != "" {
+				return cfg, dir
+			}
 		}
+
+		// Stop at project_dir boundary
+		if dir == projectDir || dir == "/" || dir == "." {
+			break
+		}
+		parent := filepath.Dir(dir)
+		if parent == dir {
+			break
+		}
+		dir = parent
 	}
 
-	return wranglerConfig{}
+	return wranglerConfig{}, ""
 }
 
 // parseWranglerConfig parses a wrangler config file (toml or json/jsonc)
@@ -146,16 +171,36 @@ func parseWranglerConfig(path string) wranglerConfig {
 	}
 
 	var cfg wranglerConfig
-
 	if strings.HasSuffix(path, ".toml") {
 		toml.Decode(string(data), &cfg)
 	} else {
-		// JSON or JSONC - strip comments for JSONC
 		cleaned := stripJSONComments(string(data))
 		json.Unmarshal([]byte(cleaned), &cfg)
 	}
-
 	return cfg
+}
+
+// readWranglerAccountCache reads from .wrangler/account-id cache
+func readWranglerAccountCache(configDir string) string {
+	// Try node_modules/.cache/wrangler/wrangler-account.json
+	cachePaths := []string{
+		filepath.Join(configDir, "node_modules", ".cache", "wrangler", "wrangler-account.json"),
+		filepath.Join(configDir, ".wrangler", "wrangler-account.json"),
+	}
+
+	for _, path := range cachePaths {
+		if data, err := os.ReadFile(path); err == nil {
+			var cache struct {
+				Account struct {
+					ID string `json:"id"`
+				} `json:"account"`
+			}
+			if json.Unmarshal(data, &cache) == nil && cache.Account.ID != "" {
+				return cache.Account.ID
+			}
+		}
+	}
+	return ""
 }
 
 // stripJSONComments removes // and /* */ comments for JSONC support
@@ -165,7 +210,6 @@ func stripJSONComments(s string) string {
 	inString := false
 
 	for i < len(s) {
-		// Track string state
 		if s[i] == '"' && (i == 0 || s[i-1] != '\\') {
 			inString = !inString
 			result.WriteByte(s[i])
@@ -173,16 +217,13 @@ func stripJSONComments(s string) string {
 			continue
 		}
 
-		// Skip comments only outside strings
 		if !inString && i+1 < len(s) {
-			// Line comment
 			if s[i] == '/' && s[i+1] == '/' {
 				for i < len(s) && s[i] != '\n' {
 					i++
 				}
 				continue
 			}
-			// Block comment
 			if s[i] == '/' && s[i+1] == '*' {
 				i += 2
 				for i+1 < len(s) && !(s[i] == '*' && s[i+1] == '/') {

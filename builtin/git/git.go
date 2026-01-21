@@ -3,15 +3,27 @@ package git
 import (
 	"context"
 	"fmt"
+	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 
+	"ccsl/internal/config"
+	"ccsl/internal/palette"
 	"ccsl/internal/types"
 )
 
 // Render provides git status using a single command
 func Render(ctx context.Context, ctxObj map[string]any) types.Segment {
-	cmd := exec.CommandContext(ctx, "git", "status", "--porcelain=v2", "--branch")
+	// Check if untracked files should be shown (default: no for speed)
+	args := []string{"status", "--porcelain=v2", "--branch", "--untracked-files=no"}
+	if cfg, ok := ctx.Value(types.CtxKeyConfig).(*config.Config); ok {
+		if pcfg, exists := cfg.Plugin["git"]; exists && pcfg.Untracked {
+			args = []string{"status", "--porcelain=v2", "--branch"}
+		}
+	}
+
+	cmd := exec.CommandContext(ctx, "git", args...)
 	out, err := cmd.Output()
 	if err != nil {
 		return types.Segment{}
@@ -52,16 +64,28 @@ func Render(ctx context.Context, ctxObj map[string]any) types.Segment {
 		return types.Segment{}
 	}
 
+	// Check for stash (fast file stat)
+	hasStash := false
+	if gitDir := findGitDir(ctx); gitDir != "" {
+		if _, err := os.Stat(filepath.Join(gitDir, "refs", "stash")); err == nil {
+			hasStash = true
+		}
+	}
+
 	text := branch
 	if dirty {
 		text += "*"
 	}
 
+	// Sync indicators with meaningful colors
 	if ahead > 0 {
-		text += fmt.Sprintf("↑%d", ahead)
+		text += palette.Yellow + fmt.Sprintf("⇡%d", ahead) + palette.Reset
 	}
 	if behind > 0 {
-		text += fmt.Sprintf("↓%d", behind)
+		text += palette.Red + fmt.Sprintf("⇣%d", behind) + palette.Reset
+	}
+	if hasStash {
+		text += palette.Dim + "≡" + palette.Reset
 	}
 
 	return types.Segment{
@@ -69,4 +93,14 @@ func Render(ctx context.Context, ctxObj map[string]any) types.Segment {
 		Style:    "dim",
 		Priority: 60,
 	}
+}
+
+// findGitDir returns the .git directory path
+func findGitDir(ctx context.Context) string {
+	cmd := exec.CommandContext(ctx, "git", "rev-parse", "--git-dir")
+	out, err := cmd.Output()
+	if err != nil {
+		return ""
+	}
+	return strings.TrimSpace(string(out))
 }

@@ -35,6 +35,7 @@ type PluginConfig struct {
 	Command   string   `toml:"command"` // for exec type
 	Args      []string `toml:"args"`
 	TimeoutMS int      `toml:"timeout_ms"`
+	Untracked bool     `toml:"untracked"` // for git: include untracked files
 }
 
 type LimitsConfig struct {
@@ -43,18 +44,26 @@ type LimitsConfig struct {
 }
 
 // Load reads configuration from standard locations with env overrides
-func Load() *Config {
+// Optional projectDir enables project-local config at .claude/ccsl.toml
+func Load(projectDir ...string) *Config {
 	cfg := defaultConfig()
 
-	// Try loading from config files
+	// Try loading from config files (first match wins)
 	xdg := os.Getenv("XDG_CONFIG_HOME")
 	if xdg == "" {
 		xdg = filepath.Join(os.Getenv("HOME"), ".config")
 	}
-	paths := []string{
+
+	var paths []string
+	// Project-local config takes highest priority
+	if len(projectDir) > 0 && projectDir[0] != "" {
+		paths = append(paths, filepath.Join(projectDir[0], ".claude", "ccsl.toml"))
+	}
+	// Global config locations
+	paths = append(paths,
 		filepath.Join(xdg, "ccsl", "config.toml"),
 		filepath.Join(os.Getenv("HOME"), ".claude", "ccsl.toml"),
-	}
+	)
 
 	for _, path := range paths {
 		if data, err := os.ReadFile(path); err == nil {
@@ -94,7 +103,7 @@ func Load() *Config {
 func defaultConfig() *Config {
 	return &Config{
 		UI: UIConfig{
-			Template: "{model}{ctx?prefix= }{cost?prefix= } {cwd}{git?prefix=:}",
+			Template: "{model}{ctx?prefix= }{cost?prefix= } {cwd}{git?prefix=:}{gcp?prefix= }{cf?prefix= }",
 			Truncate: 120,
 		},
 		Theme: ThemeConfig{

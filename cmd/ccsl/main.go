@@ -32,12 +32,20 @@ func main() {
 		os.Exit(0) // graceful degradation
 	}
 
-	cfg := config.Load()
+	// Extract project_dir for project-local config
+	var projectDir string
+	if ws, ok := ctxObj["workspace"].(map[string]any); ok {
+		if dir, ok := ws["project_dir"].(string); ok {
+			projectDir = dir
+		}
+	}
+
+	cfg := config.Load(projectDir)
 	ctx, cancel := context.WithTimeout(context.Background(),
 		time.Duration(cfg.Limits.TotalBudgetMS)*time.Millisecond)
 	defer cancel()
 
-	segs := runner.Collect(ctx, raw, cfg)
+	segs := runner.Collect(ctx, ctxObj, raw, cfg)
 	line := render.Line(cfg.UI.Template, segs, palette.From(cfg, ctxObj), cfg.UI.Truncate)
 	fmt.Println(line)
 }
@@ -60,7 +68,7 @@ func runDoctor() {
 	defer cancel()
 
 	start := time.Now()
-	segs := runner.Collect(ctx, raw, cfg)
+	segs := runner.Collect(ctx, ctxObj, raw, cfg)
 	elapsed := time.Since(start)
 
 	line := render.Line(cfg.UI.Template, segs, palette.From(cfg, ctxObj), cfg.UI.Truncate)

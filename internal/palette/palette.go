@@ -9,9 +9,11 @@ import (
 )
 
 const (
-	Reset = "\x1b[0m"
-	Bold  = "\x1b[1m"
-	Dim   = "\x1b[2m"
+	Reset  = "\x1b[0m"
+	Bold   = "\x1b[1m"
+	Dim    = "\x1b[2m"
+	Yellow = "\x1b[38;5;179m" // muted gold
+	Red    = "\x1b[38;5;167m" // muted red
 )
 
 type Palette struct {
@@ -32,6 +34,10 @@ func (p *Palette) Apply(text, style string) string {
 		return Bold + text + Reset
 	case "dim":
 		return Dim + text + Reset
+	case "yellow", "warn":
+		return Yellow + text + Reset
+	case "red", "error":
+		return Red + text + Reset
 	default:
 		if strings.HasPrefix(style, "\x1b[") {
 			return style + text + Reset
