@@ -2,7 +2,7 @@
 
 `ccsl` renders a fast, configurable status line for Claude Code. It reads JSON from Claude on stdin and prints a single line on stdout.
 
-- Built-in segments: model, cwd, git, ctx (context %), cost
+- Built-in segments: model, cwd, git, ctx, cost, gcp, cf
 - Segments derived from template (no explicit ordering needed)
 - Config via `~/.config/ccsl/config.toml` and env vars
 - External plugins supported via exec
@@ -82,6 +82,19 @@ total_budget_ms       = 200
 | git     | Branch, dirty flag, ahead/behind           | `git status --porcelain=v2`     |
 | ctx     | Context window usage percentage            | `context_window.used_percentage`|
 | cost    | Session cost in USD                        | `cost.total_cost_usd`           |
+| gcp     | GCP account/project (auto-hide if unset)   | env vars + `~/.config/gcloud`   |
+| cf      | Cloudflare account/worker (auto-hide)      | env vars + `wrangler.toml`      |
+
+### Cloud Segments
+
+**GCP** reads from `CLOUDSDK_CORE_ACCOUNT`, `CLOUDSDK_CORE_PROJECT` env vars, or falls back to gcloud config files. Shows config name if not "default".
+
+**Cloudflare** reads from `CLOUDFLARE_ACCOUNT_ID`, `CLOUDFLARE_ENV` env vars, plus `wrangler.toml/json/jsonc` in the workspace. Shows ⚠ if env account differs from config (common failure mode).
+
+Example with cloud segments:
+```toml
+template = "{model} {cwd}{git?prefix= }{gcp?prefix= }{cf?prefix= }"
+```
 
 ## Env Overrides
 
