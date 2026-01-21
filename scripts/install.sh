@@ -4,14 +4,12 @@
 
 set -e
 
-REPO="github.com/hergert/ccsl"
+REPO_URL="https://github.com/hergert/ccsl.git"
 INSTALL_DIR="$HOME/.local/bin"
-BINARY_NAME="ccsl"
-BINARY_PATH="$INSTALL_DIR/$BINARY_NAME"
+BINARY_PATH="$INSTALL_DIR/ccsl"
 CLAUDE_DIR="$HOME/.claude"
 SETTINGS_FILE="$CLAUDE_DIR/settings.json"
 
-# Colors
 info()    { printf '\033[0;34m%s\033[0m\n' "$1"; }
 success() { printf '\033[0;32m%s\033[0m\n' "$1"; }
 warn()    { printf '\033[0;33m%s\033[0m\n' "$1"; }
@@ -19,13 +17,22 @@ error()   { printf '\033[0;31m%s\033[0m\n' "$1"; exit 1; }
 
 info "Installing ccsl..."
 
-# Check for Go
+# Check dependencies
 command -v go &>/dev/null || error "Go required. Install from https://go.dev/dl/"
+command -v git &>/dev/null || error "Git required."
 
-# Install binary
+# Clone to temp dir
+TMP_DIR=$(mktemp -d)
+trap 'rm -rf "$TMP_DIR"' EXIT
+
+info "Downloading..."
+git clone --depth 1 --quiet "$REPO_URL" "$TMP_DIR"
+
+# Build
+info "Building..."
 mkdir -p "$INSTALL_DIR"
-info "Building from source..."
-GOBIN="$INSTALL_DIR" go install "$REPO/cmd/ccsl@latest"
+(cd "$TMP_DIR" && go build -o "$BINARY_PATH" ./cmd/ccsl)
+chmod +x "$BINARY_PATH"
 success "Installed $BINARY_PATH"
 
 # Check PATH
@@ -35,7 +42,6 @@ success "Installed $BINARY_PATH"
 mkdir -p "$CLAUDE_DIR"
 
 if [ -f "$SETTINGS_FILE" ]; then
-    # Update existing settings
     python3 -c "
 import json
 with open('$SETTINGS_FILE', 'r') as f: s = json.load(f)
@@ -43,7 +49,6 @@ s['statusLine'] = {'type': 'command', 'command': '$BINARY_PATH', 'padding': 0}
 with open('$SETTINGS_FILE', 'w') as f: json.dump(s, f, indent=2)
 " 2>/dev/null || warn "Could not update settings.json"
 else
-    # Create new settings
     cat > "$SETTINGS_FILE" << EOF
 {
   "statusLine": {
@@ -55,4 +60,7 @@ else
 EOF
 fi
 
-success "Installed! Restart Claude Code to activate."
+# Verify
+"$BINARY_PATH" doctor &>/dev/null && success "Verified working"
+
+success "Done! Restart Claude Code to activate."
