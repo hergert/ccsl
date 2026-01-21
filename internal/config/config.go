@@ -94,7 +94,7 @@ func Load() *Config {
 func defaultConfig() *Config {
 	return &Config{
 		UI: UIConfig{
-			Template: "{model} {cwd}{git?prefix= }{ctx?prefix= }{cost?prefix= }",
+			Template: "{model}{ctx?prefix= }{cost?prefix= } {cwd}{git?prefix= }",
 			Truncate: 120,
 		},
 		Theme: ThemeConfig{
