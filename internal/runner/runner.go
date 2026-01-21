@@ -11,15 +11,15 @@ import (
 	"sync"
 	"time"
 
-	"ccsl/builtin/cloudflare"
-	"ccsl/builtin/cost"
-	ctxbuiltin "ccsl/builtin/ctx"
-	"ccsl/builtin/cwd"
-	"ccsl/builtin/gcp"
-	"ccsl/builtin/git"
-	"ccsl/builtin/model"
-	"ccsl/internal/config"
-	"ccsl/internal/types"
+	"github.com/hergert/ccsl/builtin/cloudflare"
+	"github.com/hergert/ccsl/builtin/cost"
+	ctxbuiltin "github.com/hergert/ccsl/builtin/ctx"
+	"github.com/hergert/ccsl/builtin/cwd"
+	"github.com/hergert/ccsl/builtin/gcp"
+	"github.com/hergert/ccsl/builtin/git"
+	"github.com/hergert/ccsl/builtin/model"
+	"github.com/hergert/ccsl/internal/config"
+	"github.com/hergert/ccsl/internal/types"
 )
 
 const maxPluginStdout = 4096 // 4KiB cap for exec plugin stdout

@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 
-	"ccsl/internal/types"
+	"github.com/hergert/ccsl/internal/types"
 )
 
 // Render extracts context window usage from Claude Code's stdin JSON

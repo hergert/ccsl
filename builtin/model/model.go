@@ -4,7 +4,7 @@ import (
 	"context"
 	"strings"
 
-	"ccsl/internal/types"
+	"github.com/hergert/ccsl/internal/types"
 )
 
 // Render extracts the model's display name

@@ -6,10 +6,10 @@ import (
 	"testing"
 	"time"
 
-	"ccsl/internal/config"
-	"ccsl/internal/palette"
-	"ccsl/internal/render"
-	"ccsl/internal/runner"
+	"github.com/hergert/ccsl/internal/config"
+	"github.com/hergert/ccsl/internal/palette"
+	"github.com/hergert/ccsl/internal/render"
+	"github.com/hergert/ccsl/internal/runner"
 )
 
 func TestBasicFunctionality(t *testing.T) {

@@ -7,7 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"ccsl/internal/types"
+	"github.com/hergert/ccsl/internal/types"
 
 	"github.com/BurntSushi/toml"
 )

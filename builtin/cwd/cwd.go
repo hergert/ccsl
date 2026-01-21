@@ -5,7 +5,7 @@ import (
 	"os"
 	"path/filepath"
 
-	"ccsl/internal/types"
+	"github.com/hergert/ccsl/internal/types"
 )
 
 // Render shows the basename of the current working directory

@@ -8,9 +8,9 @@ import (
 	"path/filepath"
 	"strings"
 
-	"ccsl/internal/config"
-	"ccsl/internal/palette"
-	"ccsl/internal/types"
+	"github.com/hergert/ccsl/internal/config"
+	"github.com/hergert/ccsl/internal/palette"
+	"github.com/hergert/ccsl/internal/types"
 )
 
 // Render provides git status using a single command

@@ -7,7 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"ccsl/internal/types"
+	"github.com/hergert/ccsl/internal/types"
 )
 
 // Render returns GCP identity + project from env vars and gcloud config files.

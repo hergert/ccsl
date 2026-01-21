@@ -6,8 +6,8 @@ import (
 	"strings"
 	"unicode/utf8"
 
-	"ccsl/internal/palette"
-	"ccsl/internal/types"
+	"github.com/hergert/ccsl/internal/palette"
+	"github.com/hergert/ccsl/internal/types"
 )
 
 var templateRe = regexp.MustCompile(`\{([-\w:.]+)(\?[^}]*)?\}`)

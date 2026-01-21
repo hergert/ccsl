@@ -4,8 +4,8 @@ import (
 	"context"
 	"strings"
 
-	"ccsl/internal/config"
-	"ccsl/internal/types"
+	"github.com/hergert/ccsl/internal/config"
+	"github.com/hergert/ccsl/internal/types"
 )
 
 const (
