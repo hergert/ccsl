@@ -57,15 +57,11 @@ func Render(ctx context.Context, ctxObj map[string]any) types.Segment {
 		text += "*"
 	}
 
-	var tracking []string
 	if ahead > 0 {
-		tracking = append(tracking, fmt.Sprintf("↑%d", ahead))
+		text += fmt.Sprintf("↑%d", ahead)
 	}
 	if behind > 0 {
-		tracking = append(tracking, fmt.Sprintf("↓%d", behind))
-	}
-	if len(tracking) > 0 {
-		text += " " + strings.Join(tracking, " ")
+		text += fmt.Sprintf("↓%d", behind)
 	}
 
 	return types.Segment{
