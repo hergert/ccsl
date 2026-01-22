@@ -3,41 +3,35 @@
 # requires-python = ">=3.11"
 # dependencies = []
 # ///
+"""
+Example external cost plugin for ccsl.
+
+Note: ccsl now has a built-in 'cost' segment that reads from Claude's JSON.
+This plugin is kept as an example of the exec plugin protocol.
+"""
 import json
 import sys
 
 def main():
     try:
         data = json.load(sys.stdin)
-        
+
         # Extract cost information from Claude context
         cost_info = data.get("cost", {})
         total_cost = cost_info.get("total_cost_usd", 0.0)
-        duration = cost_info.get("total_duration_ms", 0)
-        
+
         if total_cost == 0:
             return  # No cost info available
-            
-        # Format cost and duration
-        cost_str = f"${total_cost:.3f}"
-        duration_str = f"{int(duration/1000)}s" if duration > 0 else ""
-        
-        if duration_str:
-            text = f"{cost_str} | {duration_str}"
-        else:
-            text = cost_str
-            
+
         # Return structured response
         response = {
-            "text": text,
+            "text": f"${total_cost:.2f}",
             "style": "dim",
-            "priority": 40,
-            "cache_ttl_ms": 1500,
-            "cache_key": data.get("transcript_path", "")
+            "priority": 40
         }
-        
+
         print(json.dumps(response))
-        
+
     except Exception:
         # Silent failure - just exit
         pass

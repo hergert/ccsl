@@ -6,125 +6,115 @@ import (
 	"encoding/json"
 	"io"
 	"os/exec"
+	"regexp"
 	"strings"
 	"sync"
 	"time"
 
-	"ccsl/builtin/agent"
-	"ccsl/builtin/cwd"
-	"ccsl/builtin/git"
-	"ccsl/builtin/model"
-	"ccsl/builtin/prompt"
-	"ccsl/internal/config"
-	"ccsl/internal/types"
+	"github.com/hergert/ccsl/builtin/cloudflare"
+	"github.com/hergert/ccsl/builtin/cost"
+	ctxbuiltin "github.com/hergert/ccsl/builtin/ctx"
+	"github.com/hergert/ccsl/builtin/cwd"
+	"github.com/hergert/ccsl/builtin/gcp"
+	"github.com/hergert/ccsl/builtin/git"
+	"github.com/hergert/ccsl/builtin/model"
+	"github.com/hergert/ccsl/internal/config"
+	"github.com/hergert/ccsl/internal/types"
 )
 
-// Cache for plugin results
-type cacheEntry struct {
-	segment types.Segment
-	expires time.Time
+const maxPluginStdout = 4096 // 4KiB cap for exec plugin stdout
+
+// limitedWriter wraps an io.Writer with a byte limit
+type limitedWriter struct {
+	w     io.Writer
+	n     int // bytes remaining
+	wrote int // bytes written
 }
 
-var (
-	pluginCache = make(map[string]cacheEntry)
-	cacheMux    sync.RWMutex
-)
+func (l *limitedWriter) Write(p []byte) (int, error) {
+	if l.n <= 0 {
+		return len(p), nil // silently discard
+	}
+	if len(p) > l.n {
+		p = p[:l.n]
+	}
+	n, err := l.w.Write(p)
+	l.n -= n
+	l.wrote += n
+	return n, err
+}
 
-// Collect runs all plugins and built-ins to gather segments
-func Collect(ctx context.Context, claudeJSON []byte, cfg *config.Config) []types.Segment {
-	var wg sync.WaitGroup
-	segments := make(chan types.Segment, len(cfg.Plugins.Order))
+var segmentRe = regexp.MustCompile(`\{([-\w:.]+)`)
 
-	var ctxObj map[string]any
-	if err := json.Unmarshal(claudeJSON, &ctxObj); err != nil {
-		// Can't do much, but at least don't panic on nil map access
+// ParseSegments extracts segment IDs from a template string
+func ParseSegments(template string) []string {
+	matches := segmentRe.FindAllStringSubmatch(template, -1)
+	seen := make(map[string]bool)
+	var result []string
+	for _, m := range matches {
+		id := m[1]
+		if !seen[id] {
+			seen[id] = true
+			result = append(result, id)
+		}
+	}
+	return result
+}
+
+// Collect runs segments derived from template in parallel
+func Collect(ctx context.Context, ctxObj map[string]any, claudeJSON []byte, cfg *config.Config) []types.Segment {
+
+	// Derive segments from template (or use explicit order if set)
+	segmentIDs := cfg.Plugins.Order
+	if len(segmentIDs) == 0 {
+		segmentIDs = ParseSegments(cfg.UI.Template)
 	}
 
-	// Process each plugin in the configured order
-	for _, pluginID := range cfg.Plugins.Order {
-		pluginCfg, exists := cfg.Plugin[pluginID]
-		if !exists {
-			continue
-		}
+	var wg sync.WaitGroup
+	results := make(chan types.Segment, len(segmentIDs))
 
+	for _, id := range segmentIDs {
 		wg.Add(1)
-		go func(id string, pcfg config.PluginConfig) {
+		go func(id string) {
 			defer wg.Done()
 
-			// Evaluate only_if guard if present
-			if pcfg.OnlyIf != "" && !shouldRun(ctxObj, pcfg.OnlyIf) {
-				return
-			}
-
-			// Build a cache key early (project/current dir, and optionally a context field)
-			defaultKey := buildDefaultCacheKey(id, ctxObj)
-			key := defaultKey
-			if pcfg.CacheKeyFrom != "" {
-				if v, ok := lookupPath(ctxObj, pcfg.CacheKeyFrom); ok {
-					key = id + "|" + stringify(v)
-				}
-			}
-
-			// Check cache first
-			if seg, found := getCached(key); found {
-				segments <- seg
-				return
-			}
-
-			// Create plugin-specific timeout context
+			pcfg := cfg.Plugin[id]
 			timeout := time.Duration(pcfg.TimeoutMS) * time.Millisecond
 			if timeout == 0 {
 				timeout = time.Duration(cfg.Limits.PerPluginTimeoutMS) * time.Millisecond
 			}
 
-			pluginCtx, cancel := context.WithTimeout(ctx, timeout)
+			pctx, cancel := context.WithTimeout(ctx, timeout)
 			defer cancel()
-			// Make cfg available to builtins via context
-			pluginCtx = context.WithValue(pluginCtx, types.CtxKeyConfig, cfg)
+			pctx = context.WithValue(pctx, types.CtxKeyConfig, cfg)
 
 			var seg types.Segment
-			if pcfg.Type == "builtin" {
-				seg = runBuiltin(pluginCtx, id, ctxObj)
-			} else if pcfg.Type == "exec" {
-				seg = runExec(pluginCtx, pcfg, claudeJSON)
+			if pcfg.Type == "exec" && pcfg.Command != "" {
+				seg = runExec(pctx, pcfg, claudeJSON)
+			} else {
+				seg = runBuiltin(pctx, id, ctxObj)
 			}
 
 			seg.ID = id
 			if seg.Priority == 0 {
-				seg.Priority = 50 // default priority
+				seg.Priority = 50
 			}
-
-			// Allow plugin response to refine the key after run
-			if seg.CacheKey != "" {
-				key = id + "|" + seg.CacheKey
-			}
-			ttl := pcfg.CacheTTLMS
-			if seg.CacheTTLMS > 0 {
-				ttl = seg.CacheTTLMS
-			}
-			if ttl > 0 {
-				setCached(key, seg, time.Duration(ttl)*time.Millisecond)
-			}
-
-			segments <- seg
-		}(pluginID, pluginCfg)
+			results <- seg
+		}(id)
 	}
 
-	// Close segments channel after all goroutines complete
 	go func() {
 		wg.Wait()
-		close(segments)
+		close(results)
 	}()
 
-	// Collect all segments
-	var result []types.Segment
-	for seg := range segments {
-		if seg.Text != "" { // only include non-empty segments
-			result = append(result, seg)
+	var segments []types.Segment
+	for seg := range results {
+		if seg.Text != "" {
+			segments = append(segments, seg)
 		}
 	}
-
-	return result
+	return segments
 }
 
 func runBuiltin(ctx context.Context, id string, ctxObj map[string]any) types.Segment {
@@ -133,12 +123,16 @@ func runBuiltin(ctx context.Context, id string, ctxObj map[string]any) types.Seg
 		return model.Render(ctx, ctxObj)
 	case "cwd":
 		return cwd.Render(ctx, ctxObj)
-	case "agent":
-		return agent.Render(ctx, ctxObj)
-	case "prompt":
-		return prompt.Render(ctx, ctxObj)
 	case "git":
 		return git.Render(ctx, ctxObj)
+	case "cost":
+		return cost.Render(ctx, ctxObj)
+	case "ctx":
+		return ctxbuiltin.Render(ctx, ctxObj)
+	case "gcp":
+		return gcp.Render(ctx, ctxObj)
+	case "cf", "cloudflare":
+		return cloudflare.Render(ctx, ctxObj)
 	default:
 		return types.Segment{}
 	}
@@ -147,101 +141,26 @@ func runBuiltin(ctx context.Context, id string, ctxObj map[string]any) types.Seg
 func runExec(ctx context.Context, pcfg config.PluginConfig, claudeJSON []byte) types.Segment {
 	cmd := exec.CommandContext(ctx, pcfg.Command, pcfg.Args...)
 	cmd.Stdin = bytes.NewReader(claudeJSON)
-	// Limit stdout to 4KB
 	var buf bytes.Buffer
-	cmd.Stdout = &limitedWriter{w: &buf, n: 4096}
+	lw := &limitedWriter{w: &buf, n: maxPluginStdout}
+	cmd.Stdout = lw
 	cmd.Stderr = io.Discard
-	err := cmd.Run()
-	if err != nil {
-		return types.Segment{} // silent failure
+
+	if err := cmd.Run(); err != nil {
+		return types.Segment{}
 	}
 
 	raw := strings.TrimSpace(buf.String())
 	if raw == "" {
 		return types.Segment{}
 	}
-	// Keep only the first line; ignore trailing noise or accidental logs.
-	result := raw
 	if i := strings.IndexByte(raw, '\n'); i >= 0 {
-		result = raw[:i]
+		raw = raw[:i]
 	}
 
-	// Try to parse as JSON first
-	var resp types.PluginResponse
-	if err := json.Unmarshal([]byte(result), &resp); err == nil {
-		return types.Segment{
-			Text:       resp.Text,
-			Style:      resp.Style,
-			Align:      resp.Align,
-			Priority:   resp.Priority,
-			CacheTTLMS: resp.CacheTTLMS,
-			CacheKey:   resp.CacheKey,
-		}
-	} else {
-		// Otherwise treat as plain text
-		return types.Segment{
-			Text: result,
-		}
+	var resp types.Segment
+	if json.Unmarshal([]byte(raw), &resp) == nil && resp.Text != "" {
+		return resp
 	}
-}
-
-// buildDefaultCacheKey creates a cache key with workspace context
-func buildDefaultCacheKey(id string, ctxObj map[string]any) string {
-	var pd, cd string
-	if ws, ok := ctxObj["workspace"].(map[string]any); ok {
-		if s, ok := ws["project_dir"].(string); ok {
-			pd = s
-		}
-		if s, ok := ws["current_dir"].(string); ok {
-			cd = s
-		}
-	}
-	return id + "|" + pd + "|" + cd
-}
-
-func getCached(id string) (types.Segment, bool) {
-	cacheMux.RLock()
-	defer cacheMux.RUnlock()
-
-	entry, exists := pluginCache[id]
-	if !exists || time.Now().After(entry.expires) {
-		return types.Segment{}, false
-	}
-
-	return entry.segment, true
-}
-
-func setCached(id string, seg types.Segment, ttl time.Duration) {
-	cacheMux.Lock()
-	defer cacheMux.Unlock()
-
-	pluginCache[id] = cacheEntry{
-		segment: seg,
-		expires: time.Now().Add(ttl),
-	}
-}
-
-type limitedWriter struct {
-	w       io.Writer
-	n       int64
-	written int64
-}
-
-func (l *limitedWriter) Write(p []byte) (int, error) {
-	// Remaining capacity to store
-	remain := l.n - l.written
-	if remain <= 0 {
-		// Discard but *pretend* we consumed everything to keep draining.
-		l.written += int64(len(p))
-		return len(p), nil
-	}
-	if int64(len(p)) <= remain {
-		n, err := l.w.Write(p)
-		l.written += int64(n)
-		return n, err
-	}
-	// Write up to remain, then discard the rest but report full consumption.
-	n, err := l.w.Write(p[:remain])
-	l.written += int64(n)
-	return len(p), err
+	return types.Segment{Text: raw}
 }

@@ -5,8 +5,7 @@ import (
 	"os"
 	"path/filepath"
 
-	"ccsl/internal/palette"
-	"ccsl/internal/types"
+	"github.com/hergert/ccsl/internal/types"
 )
 
 // Render shows the basename of the current working directory
@@ -36,12 +35,8 @@ func Render(ctx context.Context, ctxObj map[string]any) types.Segment {
 		dirName = currentDir
 	}
 
-	icon := ""
-	if palette.IconsEnabled(ctx) {
-		icon = "📁 "
-	}
 	return types.Segment{
-		Text:     icon + dirName,
+		Text:     dirName,
 		Priority: 80, // high priority
 	}
 }

@@ -2,41 +2,91 @@ package git
 
 import (
 	"context"
+	"fmt"
+	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
-	"time"
 
-	"ccsl/internal/types"
+	"github.com/hergert/ccsl/internal/config"
+	"github.com/hergert/ccsl/internal/palette"
+	"github.com/hergert/ccsl/internal/types"
 )
 
-// Render provides git status information with branch, dirty state, and upstream tracking
+// Render provides git status using a single command
 func Render(ctx context.Context, ctxObj map[string]any) types.Segment {
-	// Quick check if we're in a git repo
-	if !isGitRepo(ctx) {
+	// Check if untracked files should be shown (default: no for speed)
+	args := []string{"status", "--porcelain=v2", "--branch", "--untracked-files=no"}
+	if cfg, ok := ctx.Value(types.CtxKeyConfig).(*config.Config); ok {
+		if pcfg, exists := cfg.Plugin["git"]; exists && pcfg.Untracked {
+			args = []string{"status", "--porcelain=v2", "--branch"}
+		}
+	}
+
+	cmd := exec.CommandContext(ctx, "git", args...)
+	out, err := cmd.Output()
+	if err != nil {
 		return types.Segment{}
 	}
 
-	var parts []string
+	var branch string
+	var ahead, behind int
+	dirty := false
 
-	// Get branch name
-	branch := getBranch(ctx)
+	for _, line := range strings.Split(string(out), "\n") {
+		switch {
+		case strings.HasPrefix(line, "# branch.head "):
+			branch = strings.TrimPrefix(line, "# branch.head ")
+		case strings.HasPrefix(line, "# branch.ab "):
+			// format: # branch.ab +N -M
+			parts := strings.Fields(line)
+			for _, p := range parts {
+				if strings.HasPrefix(p, "+") {
+					fmt.Sscanf(p, "+%d", &ahead)
+				} else if strings.HasPrefix(p, "-") {
+					fmt.Sscanf(p, "-%d", &behind)
+				}
+			}
+		case len(line) > 0 && line[0] != '#':
+			dirty = true
+		}
+	}
+
+	if branch == "" || branch == "(detached)" {
+		// Try to get short hash for detached HEAD
+		cmd := exec.CommandContext(ctx, "git", "rev-parse", "--short", "HEAD")
+		if out, err := cmd.Output(); err == nil {
+			branch = strings.TrimSpace(string(out))
+		}
+	}
+
 	if branch == "" {
 		return types.Segment{}
 	}
-	parts = append(parts, branch)
 
-	// Check for dirty state
-	if isDirty(ctx) {
-		parts[len(parts)-1] += "*"
+	// Check for stash (fast file stat)
+	hasStash := false
+	if gitDir := findGitDir(ctx); gitDir != "" {
+		if _, err := os.Stat(filepath.Join(gitDir, "refs", "stash")); err == nil {
+			hasStash = true
+		}
 	}
 
-	// Get upstream tracking info
-	upstream := getUpstreamInfo(ctx)
-	if upstream != "" {
-		parts = append(parts, upstream)
+	text := branch
+	if dirty {
+		text += "*"
 	}
 
-	text := strings.Join(parts, " ")
+	// Sync indicators with meaningful colors
+	if ahead > 0 {
+		text += palette.Yellow + fmt.Sprintf("⇡%d", ahead) + palette.Reset
+	}
+	if behind > 0 {
+		text += palette.Red + fmt.Sprintf("⇣%d", behind) + palette.Reset
+	}
+	if hasStash {
+		text += palette.Dim + "≡" + palette.Reset
+	}
 
 	return types.Segment{
 		Text:     text,
@@ -45,77 +95,12 @@ func Render(ctx context.Context, ctxObj map[string]any) types.Segment {
 	}
 }
 
-func isGitRepo(ctx context.Context) bool {
-	ctx, cancel := context.WithTimeout(ctx, 50*time.Millisecond)
-	defer cancel()
-
-	cmd := exec.CommandContext(ctx, "git", "rev-parse", "--is-inside-work-tree")
-	output, err := cmd.Output()
-	return err == nil && strings.TrimSpace(string(output)) == "true"
-}
-
-func getBranch(ctx context.Context) string {
-	ctx, cancel := context.WithTimeout(ctx, 50*time.Millisecond)
-	defer cancel()
-
-	// Try symbolic ref first
-	cmd := exec.CommandContext(ctx, "git", "symbolic-ref", "--short", "HEAD")
-	if output, err := cmd.Output(); err == nil {
-		return strings.TrimSpace(string(output))
-	}
-
-	// Fallback to short hash for detached HEAD
-	cmd = exec.CommandContext(ctx, "git", "rev-parse", "--short", "HEAD")
-	if output, err := cmd.Output(); err == nil {
-		return strings.TrimSpace(string(output))
-	}
-
-	return ""
-}
-
-func isDirty(ctx context.Context) bool {
-	ctx, cancel := context.WithTimeout(ctx, 50*time.Millisecond)
-	defer cancel()
-
-	cmd := exec.CommandContext(ctx, "git", "diff", "--quiet", "--ignore-submodules", "--")
-	if cmd.Run() != nil {
-		return true
-	} // modified tracked files
-	// quick probe for untracked/modified/deleted (bounded by timeout)
-	cmd = exec.CommandContext(ctx, "git", "ls-files", "--others", "--exclude-standard", "-m", "-d")
-	out, _ := cmd.Output()
-	return len(strings.TrimSpace(string(out))) > 0
-}
-
-func getUpstreamInfo(ctx context.Context) string {
-	ctx, cancel := context.WithTimeout(ctx, 80*time.Millisecond)
-	defer cancel()
-
-	// Check if upstream exists
-	cmd := exec.CommandContext(ctx, "git", "rev-parse", "--abbrev-ref", "@{u}")
-	if _, err := cmd.Output(); err != nil {
-		return "" // no upstream
-	}
-
-	// Get ahead/behind counts
-	cmd = exec.CommandContext(ctx, "git", "rev-list", "--left-right", "--count", "@{u}...HEAD")
-	output, err := cmd.Output()
+// findGitDir returns the .git directory path
+func findGitDir(ctx context.Context) string {
+	cmd := exec.CommandContext(ctx, "git", "rev-parse", "--git-dir")
+	out, err := cmd.Output()
 	if err != nil {
 		return ""
 	}
-
-	counts := strings.Fields(strings.TrimSpace(string(output)))
-	if len(counts) != 2 {
-		return ""
-	}
-
-	var parts []string
-	if counts[1] != "0" { // ahead
-		parts = append(parts, "↑"+counts[1])
-	}
-	if counts[0] != "0" { // behind
-		parts = append(parts, "↓"+counts[0])
-	}
-
-	return strings.Join(parts, " ")
+	return strings.TrimSpace(string(out))
 }

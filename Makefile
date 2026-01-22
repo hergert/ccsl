@@ -1,44 +1,30 @@
-.PHONY: build build-plugins test clean install uninstall
+.PHONY: build test clean install uninstall demo help
 
-# Build the binary
 build:
 	go build -o ccsl ./cmd/ccsl
 
-# Build plugin binaries
-build-plugins:
-	go build -o ccsl-ccusage ./cmd/ccsl-ccusage
-
-# Run tests
 test:
 	go test -v ./...
 
-# Clean build artifacts
 clean:
-	rm -f ccsl ccsl-ccusage
+	rm -f ccsl
 	go clean
 
-# Install locally
-install: build build-plugins
+install: build
 	./scripts/install.sh
 
-# Uninstall
 uninstall:
 	./scripts/uninstall.sh
 
-# Test with sample data
 demo: build
-	echo '{"model":{"display_name":"Demo Model"},"workspace":{"current_dir":"'$(shell pwd)'"}}' | ./ccsl
+	echo '{"model":{"display_name":"Demo"},"workspace":{"current_dir":"'$(shell pwd)'"},"context_window":{"used_percentage":42},"cost":{"total_cost_usd":0.05}}' | ./ccsl
 
-# Show help
 help:
 	@echo "Available targets:"
-	@echo "  build         - Build the ccsl binary"
-	@echo "  build-plugins - Build plugin binaries"
-	@echo "  test          - Run all tests"  
-	@echo "  clean         - Clean build artifacts"
-	@echo "  install       - Install ccsl and plugins locally"
-	@echo "  uninstall     - Uninstall ccsl"
-	@echo "  demo          - Run demo with sample data"
-	@echo "  help          - Show this help message"
-	@echo ""
-	@echo "After install, run 'ccsl setup --ask' to enable optional plugins"
+	@echo "  build     - Build the ccsl binary"
+	@echo "  test      - Run all tests"
+	@echo "  clean     - Clean build artifacts"
+	@echo "  install   - Install ccsl locally"
+	@echo "  uninstall - Uninstall ccsl"
+	@echo "  demo      - Run demo with sample data"
+	@echo "  help      - Show this help"

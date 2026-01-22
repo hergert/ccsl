@@ -4,111 +4,146 @@ import (
 	"net/url"
 	"regexp"
 	"strings"
+	"unicode/utf8"
 
-	"ccsl/internal/palette"
-	"ccsl/internal/types"
+	"github.com/hergert/ccsl/internal/palette"
+	"github.com/hergert/ccsl/internal/types"
 )
 
 var templateRe = regexp.MustCompile(`\{([-\w:.]+)(\?[^}]*)?\}`)
+var ansiRe = regexp.MustCompile(`\x1b\[[0-9;]*m`)
+
+// segmentPos tracks a segment's position in the rendered output
+type segmentPos struct {
+	id       string
+	start    int // byte offset in result
+	end      int // byte offset in result
+	priority int
+	rawText  string // original segment text (without ANSI)
+}
+
+// visibleLen returns the visible length excluding ANSI codes
+func visibleLen(s string) int {
+	return utf8.RuneCountInString(ansiRe.ReplaceAllString(s, ""))
+}
 
 // Line renders a full statusline based on a template and segments
-func Line(template string, segments []types.Segment, pal *palette.Palette, maxLength int) string {
-	// Create segment lookup map
+func Line(template string, segments []types.Segment, pal *palette.Palette, maxLen int) string {
 	segMap := make(map[string]types.Segment)
 	for _, seg := range segments {
 		segMap[seg.ID] = seg
 	}
 
-	// Process template substitutions
-	result := templateRe.ReplaceAllStringFunc(template, func(match string) string {
-		return processTemplateMatch(match, segMap, pal)
-	})
+	// Track positions during expansion
+	var positions []segmentPos
+	var result strings.Builder
+	lastEnd := 0
 
-	// Apply final truncation if needed
-	if len(result) > maxLength {
-		result = intelligentTruncate(result, segments, maxLength)
-	}
+	for _, match := range templateRe.FindAllStringSubmatchIndex(template, -1) {
+		// Append literal text before this match
+		result.WriteString(template[lastEnd:match[0]])
 
-	return result
-}
-
-// `match` is the full `{...}` syntax
-func processTemplateMatch(match string, segMap map[string]types.Segment, pal *palette.Palette) string {
-	fullMatch := templateRe.FindStringSubmatch(match)
-	if len(fullMatch) < 2 {
-		return match
-	}
-	key := fullMatch[1]
-	options := ""
-	if len(fullMatch) > 2 {
-		options = fullMatch[2]
-	}
-
-	// Parse options (e.g., ?prefix=...&suffix=...) safely
-	var prefix, suffix string
-	if options != "" {
-		q := strings.TrimPrefix(options, "?")
-		vals, _ := url.ParseQuery(q)
-		prefix = vals.Get("prefix")
-		suffix = vals.Get("suffix")
-	}
-
-	segment, exists := segMap[key]
-	if !exists || segment.Text == "" {
-		return "" // segment doesn't exist or is empty
-	}
-
-	// Apply styling
-	styledText := pal.Apply(segment.Text, segment.Style)
-
-	return prefix + styledText + suffix
-}
-
-func intelligentTruncate(text string, segments []types.Segment, maxLength int) string {
-	if len(text) <= maxLength {
-		return text
-	}
-
-	// 1) Find the lowest-priority segment (often 'prompt') and trim its contribution.
-	// We do a best-effort pass: try to shorten the last occurrence of that segment's text.
-	if maxLength > 3 {
-		low := segments[0]
-		for _, s := range segments {
-			if s.Priority < low.Priority {
-				low = s
-			}
+		// Extract key and query parts
+		key := template[match[2]:match[3]]
+		var query string
+		if match[4] >= 0 && match[5] >= 0 {
+			query = template[match[4]:match[5]]
 		}
-		if low.Text != "" {
-			idx := strings.LastIndex(text, low.Text)
-			if idx >= 0 {
-				// Available budget when replacing this segment with a shorter version
-				keep := maxLength - (len(text) - len(low.Text))
-				if keep > 3 {
-					trimmed := wordTrim(low.Text, keep-3) + "..."
-					out := text[:idx] + trimmed + text[idx+len(low.Text):]
-					if len(out) <= maxLength {
-						return out
-					}
-					text = out // fallthrough to hard cut
-				}
+
+		seg, ok := segMap[key]
+		if ok && seg.Text != "" {
+			var prefix, suffix string
+			if query != "" {
+				q := strings.TrimPrefix(query, "?")
+				vals, _ := url.ParseQuery(q)
+				prefix = vals.Get("prefix")
+				suffix = vals.Get("suffix")
 			}
+
+			// Track position before adding segment
+			start := result.Len()
+			result.WriteString(prefix)
+			result.WriteString(pal.Apply(seg.Text, seg.Style))
+			result.WriteString(suffix)
+
+			positions = append(positions, segmentPos{
+				id:       key,
+				start:    start,
+				end:      result.Len(),
+				priority: seg.Priority,
+				rawText:  seg.Text,
+			})
+		}
+
+		lastEnd = match[1]
+	}
+	// Append remaining literal text
+	result.WriteString(template[lastEnd:])
+
+	out := result.String()
+	if maxLen > 0 && visibleLen(out) > maxLen {
+		out = truncateWithPositions(out, positions, maxLen)
+	}
+
+	return out
+}
+
+func truncateWithPositions(text string, positions []segmentPos, maxLen int) string {
+	if maxLen <= 3 {
+		return "..."[:maxLen]
+	}
+
+	// Guard: need at least one segment
+	if len(positions) == 0 {
+		return runesTruncate(text, maxLen-3) + "..."
+	}
+
+	// Find lowest priority segment to trim
+	low := positions[0]
+	for _, p := range positions[1:] {
+		if p.priority < low.priority {
+			low = p
 		}
 	}
-	// 2) Hard cut with ellipsis at the very end as last resort.
-	if maxLength <= 3 {
-		return strings.Repeat(".", maxLength)
+
+	// Use tracked position for accurate replacement
+	segText := text[low.start:low.end]
+	budget := maxLen - (visibleLen(text) - visibleLen(segText))
+	if budget > 3 {
+		trimmed := runesTruncate(segText, budget-3) + "..."
+		out := text[:low.start] + trimmed + text[low.end:]
+		if visibleLen(out) <= maxLen {
+			return out
+		}
 	}
-	return text[:maxLength-3] + "..."
+
+	return runesTruncate(text, maxLen-3) + "..."
 }
 
-// wordTrim tries to cut on a word boundary.
-func wordTrim(s string, n int) string {
-	if len(s) <= n {
-		return s
+// runesTruncate truncates by visible runes (UTF-8 safe, ANSI-aware)
+func runesTruncate(s string, n int) string {
+	if n <= 0 {
+		return ""
 	}
-	cut := s[:n]
-	if i := strings.LastIndexAny(cut, " \t"); i > n/2 {
-		return strings.TrimSpace(cut[:i])
+
+	var result strings.Builder
+	visible := 0
+	i := 0
+
+	for i < len(s) && visible < n {
+		// Check for ANSI escape sequence
+		if loc := ansiRe.FindStringIndex(s[i:]); loc != nil && loc[0] == 0 {
+			result.WriteString(s[i : i+loc[1]])
+			i += loc[1]
+			continue
+		}
+
+		// Decode next rune
+		r, size := utf8.DecodeRuneInString(s[i:])
+		result.WriteRune(r)
+		i += size
+		visible++
 	}
-	return strings.TrimSpace(cut)
+
+	return result.String()
 }

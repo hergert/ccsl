@@ -1,218 +1,66 @@
 #!/bin/bash
+# Install ccsl (Claude Code StatusLine)
+# Usage: curl -fsSL https://raw.githubusercontent.com/hergert/ccsl/main/scripts/install.sh | bash
 
 set -e
 
-# Colors for output
-RED='\033[0;31m'
-GREEN='\033[0;32m'
-YELLOW='\033[1;33m'
-BLUE='\033[0;34m'
-NC='\033[0m' # No Color
-
-# Print functions
-print_info() { echo -e "${BLUE}ℹ ${1}${NC}"; }
-print_success() { echo -e "${GREEN}✅ ${1}${NC}"; }
-print_warning() { echo -e "${YELLOW}⚠️  ${1}${NC}"; }
-print_error() { echo -e "${RED}❌ ${1}${NC}"; }
-
-# Configuration
-CLAUDE_DIR="$HOME/.claude"
-CCSL_CONFIG_DIR="$HOME/.config/ccsl"
-SETTINGS_FILE="$CLAUDE_DIR/settings.json"
-BINARY_NAME="ccsl"
-
-print_info "Installing ccsl (Claude Code StatusLine)..."
-
-# Detect OS and architecture
-OS=$(uname -s | tr '[:upper:]' '[:lower:]')
-ARCH=$(uname -m)
-
-case $ARCH in
-    x86_64) ARCH="amd64" ;;
-    aarch64) ARCH="arm64" ;;
-    arm64) ARCH="arm64" ;;
-    *) print_error "Unsupported architecture: $ARCH"; exit 1 ;;
-esac
-
-case $OS in
-    linux) OS="linux" ;;
-    darwin) OS="darwin" ;;
-    *) print_error "Unsupported operating system: $OS"; exit 1 ;;
-esac
-
-# Download URL (will be updated when we have releases)
-BINARY_URL="https://github.com/hergert/ccsl/releases/latest/download/ccsl-${OS}-${ARCH}"
-
-# Install location
+REPO_URL="https://github.com/hergert/ccsl.git"
 INSTALL_DIR="$HOME/.local/bin"
-BINARY_PATH="$INSTALL_DIR/$BINARY_NAME"
+BINARY_PATH="$INSTALL_DIR/ccsl"
+CLAUDE_DIR="$HOME/.claude"
+SETTINGS_FILE="$CLAUDE_DIR/settings.json"
 
-# Create install directory
-mkdir -p "$INSTALL_DIR"
+info()    { printf '\033[0;34m%s\033[0m\n' "$1"; }
+success() { printf '\033[0;32m%s\033[0m\n' "$1"; }
+warn()    { printf '\033[0;33m%s\033[0m\n' "$1"; }
+error()   { printf '\033[0;31m%s\033[0m\n' "$1"; exit 1; }
 
-# For now, we'll build locally since we don't have releases yet
-print_info "Building ccsl from source..."
+info "Installing ccsl..."
 
-# Check if Go is available
-if ! command -v go &> /dev/null; then
-    print_error "Go is required to build ccsl from source"
-    print_info "Install Go from https://golang.org/dl/"
-    exit 1
-fi
+# Check dependencies
+command -v go &>/dev/null || error "Go required. Install from https://go.dev/dl/"
+command -v git &>/dev/null || error "Git required."
 
-# To support `curl | bash`, we need to clone the repo into a temp dir.
-if ! command -v git &> /dev/null; then
-    print_error "Git is required to build ccsl from source"
-    exit 1
-fi
-
+# Clone to temp dir
 TMP_DIR=$(mktemp -d)
-trap 'rm -rf "$TMP_DIR"' EXIT # Cleanup on exit
+trap 'rm -rf "$TMP_DIR"' EXIT
 
-print_info "Cloning repository into a temporary directory..."
-if git clone --depth 1 https://github.com/hergert/ccsl.git "$TMP_DIR"; then
-    cd "$TMP_DIR"
-else
-    print_error "Failed to clone repository."
-    exit 1
-fi
+info "Downloading..."
+git clone --depth 1 --quiet "$REPO_URL" "$TMP_DIR"
 
-# Build the binary
-print_info "Building in $(pwd)..."
-
-if go build -o "$BINARY_PATH" ./cmd/ccsl; then
-    print_success "Built ccsl binary at $BINARY_PATH"
-else
-    print_error "Failed to build ccsl"
-    exit 1
-fi
-
-# Make sure binary is executable
+# Build
+info "Building..."
+mkdir -p "$INSTALL_DIR"
+(cd "$TMP_DIR" && go build -o "$BINARY_PATH" ./cmd/ccsl)
 chmod +x "$BINARY_PATH"
+success "Installed $BINARY_PATH"
 
-# Build ccusage connector (optional plugin)
-print_info "Building ccsl-ccusage connector..."
-if go build -o "$INSTALL_DIR/ccsl-ccusage" ./cmd/ccsl-ccusage; then
-    chmod +x "$INSTALL_DIR/ccsl-ccusage"
-    print_success "Built ccsl-ccusage connector at $INSTALL_DIR/ccsl-ccusage"
-else
-    print_warning "Skipped building ccsl-ccusage (optional). You can build later with 'make build-plugins'."
-fi
+# Check PATH
+[[ ":$PATH:" != *":$INSTALL_DIR:"* ]] && warn "Add to PATH: export PATH=\"\$HOME/.local/bin:\$PATH\""
 
-# Check if install directory is in PATH
-if [[ ":$PATH:" != *":$INSTALL_DIR:"* ]]; then
-    print_warning "$INSTALL_DIR is not in your PATH"
-    print_info "Add this to your shell profile:"
-    print_info "export PATH=\"\$HOME/.local/bin:\$PATH\""
-fi
-
-# Create config directory
-mkdir -p "$CCSL_CONFIG_DIR"
-
-# Create default config if it doesn't exist
-if [ ! -f "$CCSL_CONFIG_DIR/config.toml" ]; then
-    cat > "$CCSL_CONFIG_DIR/config.toml" << 'EOF'
-[ui]
-template = "{model}  {cwd}{agent?prefix=  }{git?prefix=  }{prompt?prefix= — 🗣 }"
-truncate = 120
-padding = 0
-
-[theme]
-mode = "auto"
-icons = true
-ansi = true
-
-[plugins]
-order = ["model", "cwd", "agent", "git", "prompt"]
-
-[plugin.git]
-type = "builtin"
-style = "dim"
-timeout_ms = 90
-cache_ttl_ms = 300
-
-[limits]
-per_plugin_timeout_ms = 120
-total_budget_ms = 220
-EOF
-    print_success "Created default config at $CCSL_CONFIG_DIR/config.toml"
-fi
-
-# Create Claude directories
+# Configure Claude Code
 mkdir -p "$CLAUDE_DIR"
 
-# Backup existing settings
 if [ -f "$SETTINGS_FILE" ]; then
-    BACKUP_FILE="${SETTINGS_FILE}.backup.$(date +%Y%m%d_%H%M%S)"
-    cp "$SETTINGS_FILE" "$BACKUP_FILE"
-    print_success "Backed up existing settings to $(basename $BACKUP_FILE)"
-fi
-
-# Create default Claude settings if none exist
-if [ ! -f "$SETTINGS_FILE" ]; then
-    cat > "$SETTINGS_FILE" << 'EOF'
-{
-  "$schema": "https://json.schemastore.org/claude-code-settings.json"
-}
-EOF
-fi
-
-# Update Claude settings with ccsl
-print_info "Updating Claude Code settings..."
-
-python3 << EOF
+    python3 -c "
 import json
-import sys
-
-settings_file = "$SETTINGS_FILE"
-
-# Load existing settings
-try:
-    with open(settings_file, 'r') as f:
-        settings = json.load(f)
-except:
-    settings = {"\$schema": "https://json.schemastore.org/claude-code-settings.json"}
-
-# Add/update statusline configuration
-settings["statusLine"] = {
+with open('$SETTINGS_FILE', 'r') as f: s = json.load(f)
+s['statusLine'] = {'type': 'command', 'command': '$BINARY_PATH', 'padding': 0}
+with open('$SETTINGS_FILE', 'w') as f: json.dump(s, f, indent=2)
+" 2>/dev/null || warn "Could not update settings.json"
+else
+    cat > "$SETTINGS_FILE" << EOF
+{
+  "statusLine": {
     "type": "command",
     "command": "$BINARY_PATH",
     "padding": 0
+  }
 }
-
-# Write updated settings
-try:
-    with open(settings_file, 'w') as f:
-        json.dump(settings, f, indent=2)
-    print("Settings updated successfully")
-except Exception as e:
-    print(f"Error updating settings: {e}")
-    sys.exit(1)
 EOF
-
-# Test the installation
-print_info "Testing ccsl installation..."
-echo '{"model":{"display_name":"Test"},"workspace":{"current_dir":"'$(pwd)'"}}' | "$BINARY_PATH" > /dev/null
-
-if [ $? -eq 0 ]; then
-    print_success "ccsl installed successfully!"
-    print_info "Config location: $CCSL_CONFIG_DIR/config.toml"
-
-    # Offer optional setup wizard only if TTY
-    if [ -t 0 ] && [ -t 1 ]; then
-        echo
-        read -r -p "Run ccsl setup to enable optional segments now? [y/N] " yn
-        if [[ "$yn" =~ ^[Yy]$ ]]; then
-            "$BINARY_PATH" setup --ask || true
-        else
-            print_info "You can run it anytime: ccsl setup --ask"
-        fi
-    fi
-    
-    print_info "Restart Claude Code to see the new status bar."
-else
-    print_error "Installation test failed. Check the ccsl binary."
-    exit 1
 fi
 
-print_success "Installation complete!"
+# Verify
+"$BINARY_PATH" doctor &>/dev/null && success "Verified working"
+
+success "Done! Restart Claude Code to activate."

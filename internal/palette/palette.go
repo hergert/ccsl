@@ -4,57 +4,48 @@ import (
 	"context"
 	"strings"
 
-	"ccsl/internal/config"
-	"ccsl/internal/types"
+	"github.com/hergert/ccsl/internal/config"
+	"github.com/hergert/ccsl/internal/types"
 )
 
-// ANSI escape codes
 const (
-	ANSIReset = "\x1b[0m"
-	ANSIBold  = "\x1b[1m"
-	ANSIDim   = "\x1b[2m"
+	Reset  = "\x1b[0m"
+	Bold   = "\x1b[1m"
+	Dim    = "\x1b[2m"
+	Yellow = "\x1b[38;5;179m" // muted gold
+	Red    = "\x1b[38;5;167m" // muted red
 )
 
 type Palette struct {
-	ansiEnabled bool
+	ansi bool
 }
 
-// From creates a palette based on config and Claude context
-func From(cfg *config.Config, ctxObj map[string]any) *Palette {
-	ansiEnabled := cfg.Theme.ANSI
-	
-	// Auto-detect theme based on Claude's output_style if available
-	if cfg.Theme.Mode == "auto" {
-		// TODO: Implement auto-detection based on ctxObj output_style
-		// For now, default to enabled
-	}
-
-	return &Palette{
-		ansiEnabled: ansiEnabled,
-	}
+func From(cfg *config.Config, _ map[string]any) *Palette {
+	return &Palette{ansi: cfg.Theme.ANSI}
 }
 
-// Apply applies styling to text based on the style string
 func (p *Palette) Apply(text, style string) string {
-	if !p.ansiEnabled || style == "" || style == "normal" {
+	if !p.ansi || style == "" || style == "normal" {
 		return text
 	}
 
 	switch style {
 	case "bold":
-		return ANSIBold + text + ANSIReset
+		return Bold + text + Reset
 	case "dim":
-		return ANSIDim + text + ANSIReset
+		return Dim + text + Reset
+	case "yellow", "warn":
+		return Yellow + text + Reset
+	case "red", "error":
+		return Red + text + Reset
 	default:
-		// Check if it's already raw ANSI
-		if strings.Contains(style, "\x1b[") {
-			return style + text + ANSIReset
+		if strings.HasPrefix(style, "\x1b[") {
+			return style + text + Reset
 		}
 		return text
 	}
 }
 
-// IconsEnabled checks if icons should be displayed based on theme config
 func IconsEnabled(ctx context.Context) bool {
 	if cfg, ok := ctx.Value(types.CtxKeyConfig).(*config.Config); ok {
 		return cfg.Theme.Icons

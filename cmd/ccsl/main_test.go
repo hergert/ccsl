@@ -2,13 +2,14 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"testing"
 	"time"
 
-	"ccsl/internal/config"
-	"ccsl/internal/palette"
-	"ccsl/internal/render"
-	"ccsl/internal/runner"
+	"github.com/hergert/ccsl/internal/config"
+	"github.com/hergert/ccsl/internal/palette"
+	"github.com/hergert/ccsl/internal/render"
+	"github.com/hergert/ccsl/internal/runner"
 )
 
 func TestBasicFunctionality(t *testing.T) {
@@ -30,11 +31,14 @@ func TestBasicFunctionality(t *testing.T) {
 		}
 	}`)
 
+	var ctxObj map[string]any
+	json.Unmarshal(claudeJSON, &ctxObj)
+
 	// Test runner.Collect
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 	defer cancel()
 
-	segments := runner.Collect(ctx, claudeJSON, cfg)
+	segments := runner.Collect(ctx, ctxObj, claudeJSON, cfg)
 
 	// Should have at least model and cwd segments
 	if len(segments) < 2 {
@@ -62,8 +66,10 @@ func TestConfigLoading(t *testing.T) {
 		t.Fatal("Config should not be nil")
 	}
 
-	if len(cfg.Plugins.Order) == 0 {
-		t.Error("Expected default plugin order")
+	// Order can be nil (derive from template) or explicit
+	// Just verify we have a valid template to derive from
+	if cfg.UI.Template == "" && len(cfg.Plugins.Order) == 0 {
+		t.Error("Expected either template or explicit plugin order")
 	}
 
 	if cfg.UI.Template == "" {
@@ -95,7 +101,9 @@ func TestSegmentGeneration(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			segments := runner.Collect(ctx, []byte(tc.input), cfg)
+			var ctxObj map[string]any
+			json.Unmarshal([]byte(tc.input), &ctxObj)
+			segments := runner.Collect(ctx, ctxObj, []byte(tc.input), cfg)
 
 			segmentIDs := make(map[string]bool)
 			for _, seg := range segments {

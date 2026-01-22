@@ -1,4 +1,4 @@
-module ccsl
+module github.com/hergert/ccsl
 
 go 1.21
 

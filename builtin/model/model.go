@@ -4,8 +4,7 @@ import (
 	"context"
 	"strings"
 
-	"ccsl/internal/palette"
-	"ccsl/internal/types"
+	"github.com/hergert/ccsl/internal/types"
 )
 
 // Render extracts the model's display name
@@ -16,12 +15,8 @@ func Render(ctx context.Context, ctxObj map[string]any) types.Segment {
 			text = strings.TrimSpace(name)
 		}
 	}
-	icon := ""
-	if palette.IconsEnabled(ctx) {
-		icon = "🤖 "
-	}
 	return types.Segment{
-		Text:     icon + text,
+		Text:     text,
 		Style:    "bold",
 		Priority: 90, // high priority
 	}
