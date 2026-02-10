@@ -11,10 +11,12 @@ import (
 	"sync"
 	"time"
 
+	"github.com/hergert/ccsl/builtin/agent"
 	"github.com/hergert/ccsl/builtin/cloudflare"
 	"github.com/hergert/ccsl/builtin/cost"
 	ctxbuiltin "github.com/hergert/ccsl/builtin/ctx"
 	"github.com/hergert/ccsl/builtin/cwd"
+	"github.com/hergert/ccsl/builtin/duration"
 	"github.com/hergert/ccsl/builtin/gcp"
 	"github.com/hergert/ccsl/builtin/git"
 	"github.com/hergert/ccsl/builtin/model"
@@ -133,6 +135,10 @@ func runBuiltin(ctx context.Context, id string, ctxObj map[string]any) types.Seg
 		return gcp.Render(ctx, ctxObj)
 	case "cf", "cloudflare":
 		return cloudflare.Render(ctx, ctxObj)
+	case "agent":
+		return agent.Render(ctx, ctxObj)
+	case "duration":
+		return duration.Render(ctx, ctxObj)
 	default:
 		return types.Segment{}
 	}

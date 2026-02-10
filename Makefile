@@ -17,7 +17,7 @@ uninstall:
 	./scripts/uninstall.sh
 
 demo: build
-	echo '{"model":{"display_name":"Demo"},"workspace":{"current_dir":"'$(shell pwd)'"},"context_window":{"used_percentage":42},"cost":{"total_cost_usd":0.05}}' | ./ccsl
+	echo '{"model":{"display_name":"Demo"},"agent":{"name":"task"},"workspace":{"current_dir":"'$(shell pwd)'"},"context_window":{"used_percentage":42},"cost":{"total_cost_usd":0.05,"total_duration_ms":498000}}' | ./ccsl
 
 help:
 	@echo "Available targets:"
