@@ -33,21 +33,24 @@ func Render(_ context.Context, ctxObj map[string]any) types.Segment {
 		return types.Segment{}
 	}
 
-	return types.Segment{
-		Text:     fmt.Sprintf("%.0f%%", pct),
-		Style:    styleForPercent(pct),
-		Priority: 45,
-	}
-}
+	exceeds200k, _ := ctxObj["exceeds_200k_tokens"].(bool)
 
-// styleForPercent returns color based on context usage thresholds
-func styleForPercent(pct float64) string {
+	text := fmt.Sprintf("%.0f%%", pct)
+	style := "dim"
+
 	switch {
+	case pct >= 90 || exceeds200k:
+		text += "!"
+		style = "red"
 	case pct >= 75:
-		return "red"
+		style = "red"
 	case pct >= 50:
-		return "yellow"
-	default:
-		return "dim"
+		style = "yellow"
+	}
+
+	return types.Segment{
+		Text:     text,
+		Style:    style,
+		Priority: 45,
 	}
 }

@@ -15,19 +15,23 @@ func Render(ctx context.Context, ctxObj map[string]any) types.Segment {
 	}
 
 	ms, ok := costData["total_duration_ms"].(float64)
-	if !ok || ms < 60000 {
+	if !ok || ms <= 0 {
 		return types.Segment{}
 	}
 
-	minutes := int(ms / 60000)
+	secs := int(ms / 1000)
+	minutes := secs / 60
 	hours := minutes / 60
 	mins := minutes % 60
 
 	var text string
-	if hours > 0 {
+	switch {
+	case hours > 0:
 		text = fmt.Sprintf("%dh%dm", hours, mins)
-	} else {
+	case minutes > 0:
 		text = fmt.Sprintf("%dm", mins)
+	default:
+		text = fmt.Sprintf("%ds", secs)
 	}
 
 	return types.Segment{

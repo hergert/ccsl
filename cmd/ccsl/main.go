@@ -54,9 +54,11 @@ func runDoctor() {
 	cwd, _ := os.Getwd()
 	raw := []byte(fmt.Sprintf(`{
   "model": {"display_name": "Opus"},
+  "agent": {"name": "task"},
   "workspace": {"current_dir": %q},
-  "context_window": {"used_percentage": 42},
-  "cost": {"total_cost_usd": 0.05}
+  "context_window": {"used_percentage": 91},
+  "exceeds_200k_tokens": true,
+  "cost": {"total_cost_usd": 1.23, "total_duration_ms": 498000}
 }`, cwd))
 
 	var ctxObj map[string]any
