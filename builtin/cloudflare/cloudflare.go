@@ -38,7 +38,7 @@ func Render(ctx context.Context, ctxObj map[string]any) types.Segment {
 	}
 
 	// Find nearest wrangler config (walk current_dir → project_dir)
-	cfg, configDir := findWranglerConfig(currentDir, projectDir)
+	cfg, _ := findWranglerConfig(currentDir, projectDir)
 
 	// Resolve env
 	envName := os.Getenv("CLOUDFLARE_ENV")
@@ -54,9 +54,6 @@ func Render(ctx context.Context, ctxObj map[string]any) types.Segment {
 			}
 		}
 	}
-
-	// Resolve account ID (priority order)
-	accountID := resolveAccountID(configDir, cfg.AccountID)
 
 	projectName := cfg.Name
 
@@ -78,38 +75,11 @@ func Render(ctx context.Context, ctxObj map[string]any) types.Segment {
 		text += "⚠"
 	}
 
-	// If we have account but no project, show shortened account
-	if projectName == "" && accountID != "" {
-		text = "cf:" + shortenAccountID(accountID)
-	}
-
 	return types.Segment{
 		Text:     text,
 		Style:    "dim",
 		Priority: 35,
 	}
-}
-
-// resolveAccountID resolves account ID (no .env reading for security)
-func resolveAccountID(configDir, configAccountID string) string {
-	// 1. Process env var
-	if id := getEnvAccountID(); id != "" {
-		return id
-	}
-
-	// 2. Config file account_id
-	if configAccountID != "" {
-		return configAccountID
-	}
-
-	// 3. Wrangler account cache (non-secret metadata)
-	if configDir != "" {
-		if id := readWranglerAccountCache(configDir); id != "" {
-			return id
-		}
-	}
-
-	return ""
 }
 
 // getEnvAccountID checks both new and deprecated env var names
@@ -180,29 +150,6 @@ func parseWranglerConfig(path string) wranglerConfig {
 	return cfg
 }
 
-// readWranglerAccountCache reads from .wrangler/account-id cache
-func readWranglerAccountCache(configDir string) string {
-	// Try node_modules/.cache/wrangler/wrangler-account.json
-	cachePaths := []string{
-		filepath.Join(configDir, "node_modules", ".cache", "wrangler", "wrangler-account.json"),
-		filepath.Join(configDir, ".wrangler", "wrangler-account.json"),
-	}
-
-	for _, path := range cachePaths {
-		if data, err := os.ReadFile(path); err == nil {
-			var cache struct {
-				Account struct {
-					ID string `json:"id"`
-				} `json:"account"`
-			}
-			if json.Unmarshal(data, &cache) == nil && cache.Account.ID != "" {
-				return cache.Account.ID
-			}
-		}
-	}
-	return ""
-}
-
 // stripJSONComments removes // and /* */ comments for JSONC support
 func stripJSONComments(s string) string {
 	var result strings.Builder
@@ -229,7 +176,9 @@ func stripJSONComments(s string) string {
 				for i+1 < len(s) && !(s[i] == '*' && s[i+1] == '/') {
 					i++
 				}
-				i += 2
+				if i+1 < len(s) {
+					i += 2
+				}
 				continue
 			}
 		}
@@ -239,12 +188,4 @@ func stripJSONComments(s string) string {
 	}
 
 	return result.String()
-}
-
-// shortenAccountID shows first 4 and last 4 chars of account ID
-func shortenAccountID(id string) string {
-	if len(id) <= 10 {
-		return id
-	}
-	return id[:4] + "…" + id[len(id)-4:]
 }

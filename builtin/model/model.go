@@ -21,10 +21,3 @@ func Render(ctx context.Context, ctxObj map[string]any) types.Segment {
 		Priority: 90, // high priority
 	}
 }
-
-func getStringValue(m map[string]any, key string) string {
-	if val, ok := m[key].(string); ok {
-		return val
-	}
-	return ""
-}

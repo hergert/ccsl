@@ -17,7 +17,7 @@ uninstall:
 	./scripts/uninstall.sh
 
 demo: build
-	echo '{"model":{"display_name":"Demo"},"agent":{"name":"task"},"workspace":{"current_dir":"'$(shell pwd)'"},"context_window":{"used_percentage":92},"exceeds_200k_tokens":true,"cost":{"total_cost_usd":0.05,"total_duration_ms":498000,"total_lines_added":156,"total_lines_removed":23}}' | ./ccsl
+	echo '{"model":{"display_name":"Opus 4.6"},"agent":{"name":"task"},"worktree":{"name":"fix-auth","branch":"wt/fix-auth"},"workspace":{"current_dir":"'$(shell pwd)'"},"context_window":{"used_percentage":92,"context_window_size":1000000},"exceeds_200k_tokens":true,"cost":{"total_cost_usd":0.05,"total_duration_ms":498000,"total_lines_added":156,"total_lines_removed":23},"rate_limits":{"five_hour":{"used_percentage":72},"seven_day":{"used_percentage":15}}}' | ./ccsl
 
 help:
 	@echo "Available targets:"

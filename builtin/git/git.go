@@ -77,15 +77,31 @@ func Render(ctx context.Context, ctxObj map[string]any) types.Segment {
 		text += "*"
 	}
 
-	// Sync indicators with meaningful colors
+	// Sync indicators with meaningful colors (respect ANSI config)
+	ansi := true
+	if cfg, ok := ctx.Value(types.CtxKeyConfig).(*config.Config); ok {
+		ansi = cfg.Theme.ANSI
+	}
 	if ahead > 0 {
-		text += palette.Yellow + fmt.Sprintf("⇡%d", ahead) + palette.Reset
+		s := fmt.Sprintf("⇡%d", ahead)
+		if ansi {
+			s = palette.Yellow + s + palette.Reset
+		}
+		text += s
 	}
 	if behind > 0 {
-		text += palette.Red + fmt.Sprintf("⇣%d", behind) + palette.Reset
+		s := fmt.Sprintf("⇣%d", behind)
+		if ansi {
+			s = palette.Red + s + palette.Reset
+		}
+		text += s
 	}
 	if hasStash {
-		text += palette.Dim + "≡" + palette.Reset
+		s := "≡"
+		if ansi {
+			s = palette.Dim + s + palette.Reset
+		}
+		text += s
 	}
 
 	return types.Segment{

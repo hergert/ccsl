@@ -19,7 +19,10 @@ import (
 	"github.com/hergert/ccsl/builtin/duration"
 	"github.com/hergert/ccsl/builtin/gcp"
 	"github.com/hergert/ccsl/builtin/git"
+	"github.com/hergert/ccsl/builtin/lines"
 	"github.com/hergert/ccsl/builtin/model"
+	"github.com/hergert/ccsl/builtin/ratelimit"
+	"github.com/hergert/ccsl/builtin/worktree"
 	"github.com/hergert/ccsl/internal/config"
 	"github.com/hergert/ccsl/internal/types"
 )
@@ -139,6 +142,12 @@ func runBuiltin(ctx context.Context, id string, ctxObj map[string]any) types.Seg
 		return agent.Render(ctx, ctxObj)
 	case "duration":
 		return duration.Render(ctx, ctxObj)
+	case "ratelimit":
+		return ratelimit.Render(ctx, ctxObj)
+	case "worktree":
+		return worktree.Render(ctx, ctxObj)
+	case "lines":
+		return lines.Render(ctx, ctxObj)
 	default:
 		return types.Segment{}
 	}

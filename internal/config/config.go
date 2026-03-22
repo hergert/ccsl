@@ -103,7 +103,7 @@ func Load(projectDir ...string) *Config {
 func defaultConfig() *Config {
 	return &Config{
 		UI: UIConfig{
-			Template: "{model}{agent?prefix= }{ctx?prefix= }{cost?prefix= }{duration?prefix= } {cwd}{git?prefix=:}{gcp?prefix= }{cf?prefix= }",
+			Template: "{model}{agent?prefix= }{worktree?prefix= }{ctx?prefix= }{cost?prefix= }{duration?prefix= }{ratelimit?prefix= } {cwd}{git?prefix=:}{gcp?prefix= }{cf?prefix= }",
 			Truncate: 120,
 		},
 		Theme: ThemeConfig{
@@ -120,6 +120,9 @@ func defaultConfig() *Config {
 			"ctx":      {Type: "builtin", TimeoutMS: 10},
 			"cost":     {Type: "builtin", TimeoutMS: 10},
 			"agent":    {Type: "builtin", TimeoutMS: 10},
+			"worktree":  {Type: "builtin", TimeoutMS: 10},
+			"ratelimit": {Type: "builtin", TimeoutMS: 10},
+			"lines":     {Type: "builtin", TimeoutMS: 10},
 			"duration": {Type: "builtin", TimeoutMS: 10},
 		},
 		Limits: LimitsConfig{

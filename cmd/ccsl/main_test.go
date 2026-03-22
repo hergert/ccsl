@@ -84,6 +84,7 @@ func TestSegmentGeneration(t *testing.T) {
 	testCases := []struct {
 		name     string
 		input    string
+		template string   // override template, empty = default
 		expected []string // segment IDs we expect
 	}{
 		{
@@ -94,13 +95,44 @@ func TestSegmentGeneration(t *testing.T) {
 			}`,
 			expected: []string{"model", "cwd"},
 		},
+		{
+			name: "with rate limits",
+			input: `{
+				"model": {"display_name": "Test"},
+				"workspace": {"current_dir": "/tmp"},
+				"rate_limits": {"five_hour": {"used_percentage": 72}, "seven_day": {"used_percentage": 15}}
+			}`,
+			expected: []string{"model", "cwd", "ratelimit"},
+		},
+		{
+			name: "with worktree",
+			input: `{
+				"model": {"display_name": "Test"},
+				"workspace": {"current_dir": "/tmp"},
+				"worktree": {"name": "fix-bug", "branch": "wt/fix-bug"}
+			}`,
+			expected: []string{"model", "cwd", "worktree"},
+		},
+		{
+			name: "with lines changed",
+			input: `{
+				"model": {"display_name": "Test"},
+				"workspace": {"current_dir": "/tmp"},
+				"cost": {"total_lines_added": 50, "total_lines_removed": 10}
+			}`,
+			template: "{model} {cwd}{lines?prefix= }",
+			expected: []string{"model", "cwd", "lines"},
+		},
 	}
 
-	cfg := config.Load()
 	ctx := context.Background()
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
+			cfg := config.Load()
+			if tc.template != "" {
+				cfg.UI.Template = tc.template
+			}
 			var ctxObj map[string]any
 			json.Unmarshal([]byte(tc.input), &ctxObj)
 			segments := runner.Collect(ctx, ctxObj, []byte(tc.input), cfg)

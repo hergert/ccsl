@@ -53,13 +53,15 @@ func main() {
 func runDoctor() {
 	cwd, _ := os.Getwd()
 	raw := []byte(fmt.Sprintf(`{
-  "model": {"display_name": "Opus"},
+  "model": {"display_name": "Opus 4.6"},
   "agent": {"name": "task"},
+  "worktree": {"name": "fix-auth", "branch": "wt/fix-auth"},
   "workspace": {"current_dir": %q},
-  "context_window": {"used_percentage": 91},
+  "context_window": {"used_percentage": 91, "context_window_size": 1000000},
   "exceeds_200k_tokens": true,
-  "cost": {"total_cost_usd": 1.23, "total_duration_ms": 498000}
-}`, cwd))
+  "cost": {"total_cost_usd": 1.23, "total_duration_ms": 498000, "total_lines_added": 156, "total_lines_removed": 23},
+  "rate_limits": {"five_hour": {"used_percentage": 72, "resets_at": %d}, "seven_day": {"used_percentage": 15}}
+}`, cwd, time.Now().Add(23*time.Minute).Unix()))
 
 	var ctxObj map[string]any
 	json.Unmarshal(raw, &ctxObj)
