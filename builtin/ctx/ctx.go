@@ -63,9 +63,6 @@ func Render(_ context.Context, ctxObj map[string]any) types.Segment {
 	}
 
 	text := fmt.Sprintf("%.0f%%", pct)
-	if large {
-		text += "·1M"
-	}
 	if style == "red" {
 		text += "!"
 	}

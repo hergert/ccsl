@@ -22,7 +22,7 @@ func Render(_ context.Context, ctxObj map[string]any) types.Segment {
 
 	if fh, ok := rl["five_hour"].(map[string]any); ok {
 		if pct, ok := fh["used_percentage"].(float64); ok {
-			s := fmt.Sprintf("5h:%.0f%%", pct)
+			s := fmt.Sprintf("%.0f%%", pct) + "⁵ʰ"
 			if resetAt, ok := fh["resets_at"].(float64); ok {
 				if remaining := time.Until(time.Unix(int64(resetAt), 0)); remaining > 0 && pct >= 70 {
 					s += fmt.Sprintf("↻%s", fmtDuration(remaining))
@@ -37,7 +37,7 @@ func Render(_ context.Context, ctxObj map[string]any) types.Segment {
 
 	if sd, ok := rl["seven_day"].(map[string]any); ok {
 		if pct, ok := sd["used_percentage"].(float64); ok {
-			parts = append(parts, fmt.Sprintf("7d:%.0f%%", pct))
+			parts = append(parts, fmt.Sprintf("%.0f%%", pct)+"⁷ᵈ")
 			if pct > maxPct {
 				maxPct = pct
 			}
