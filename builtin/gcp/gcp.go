@@ -2,7 +2,6 @@ package gcp
 
 import (
 	"bufio"
-	"context"
 	"os"
 	"path/filepath"
 	"strings"
@@ -10,17 +9,14 @@ import (
 	"github.com/hergert/ccsl/internal/types"
 )
 
-// Render returns GCP identity + project from env vars and gcloud config files.
-// No subprocess spawning - reads config files directly for speed.
-func Render(ctx context.Context, ctxObj map[string]any) types.Segment {
+// No subprocess spawning — reads config files directly for speed.
+func Render(raw map[string]any) types.Segment {
 	envAccount := os.Getenv("CLOUDSDK_CORE_ACCOUNT")
 	envProject := os.Getenv("CLOUDSDK_CORE_PROJECT")
 	envConfigName := os.Getenv("CLOUDSDK_ACTIVE_CONFIG_NAME")
 
-	// Read from config files
 	fileAccount, fileProject, fileName, configCount := readGcloudConfig()
 
-	// Determine effective values
 	account := envAccount
 	if account == "" {
 		account = fileAccount
@@ -34,19 +30,16 @@ func Render(ctx context.Context, ctxObj map[string]any) types.Segment {
 		configName = fileName
 	}
 
-	// Nothing to show
 	if account == "" && project == "" {
 		return types.Segment{}
 	}
 
-	// Check for mismatch (env vars override file config)
 	mismatch := false
 	if (envAccount != "" && fileAccount != "" && envAccount != fileAccount) ||
 		(envProject != "" && fileProject != "" && envProject != fileProject) {
 		mismatch = true
 	}
 
-	// Build compact output: gcp:project or gcp:project@config
 	text := "gcp:"
 	if project != "" {
 		text += project
@@ -54,7 +47,6 @@ func Render(ctx context.Context, ctxObj map[string]any) types.Segment {
 		text += shortenEmail(account)
 	}
 
-	// Show config name if multiple configs or non-default
 	if configCount > 1 || (configName != "" && configName != "default") {
 		text += "@" + configName
 	}
@@ -70,7 +62,6 @@ func Render(ctx context.Context, ctxObj map[string]any) types.Segment {
 	}
 }
 
-// readGcloudConfig reads the active gcloud configuration from disk
 func readGcloudConfig() (account, project, configName string, configCount int) {
 	configDir := os.Getenv("CLOUDSDK_CONFIG")
 	if configDir == "" {
@@ -81,7 +72,6 @@ func readGcloudConfig() (account, project, configName string, configCount int) {
 		configDir = filepath.Join(home, ".config", "gcloud")
 	}
 
-	// Count configurations
 	configsDir := filepath.Join(configDir, "configurations")
 	if entries, err := os.ReadDir(configsDir); err == nil {
 		for _, e := range entries {
@@ -91,10 +81,8 @@ func readGcloudConfig() (account, project, configName string, configCount int) {
 		}
 	}
 
-	// Determine active config name
 	configName = os.Getenv("CLOUDSDK_ACTIVE_CONFIG_NAME")
 	if configName == "" {
-		// Read from active_config file
 		data, err := os.ReadFile(filepath.Join(configDir, "active_config"))
 		if err == nil {
 			configName = strings.TrimSpace(string(data))
@@ -104,14 +92,12 @@ func readGcloudConfig() (account, project, configName string, configCount int) {
 		configName = "default"
 	}
 
-	// Read the config file
 	configPath := filepath.Join(configsDir, "config_"+configName)
 	account, project = parseGcloudConfig(configPath)
 
 	return
 }
 
-// parseGcloudConfig parses a gcloud config INI file for [core] account and project
 func parseGcloudConfig(path string) (account, project string) {
 	file, err := os.Open(path)
 	if err != nil {
@@ -124,7 +110,6 @@ func parseGcloudConfig(path string) (account, project string) {
 	for scanner.Scan() {
 		line := strings.TrimSpace(scanner.Text())
 
-		// Section header
 		if strings.HasPrefix(line, "[") {
 			inCore = strings.HasPrefix(line, "[core]")
 			continue
@@ -134,7 +119,6 @@ func parseGcloudConfig(path string) (account, project string) {
 			continue
 		}
 
-		// Key = value
 		if idx := strings.Index(line, "="); idx > 0 {
 			key := strings.TrimSpace(line[:idx])
 			value := strings.TrimSpace(line[idx+1:])
@@ -147,7 +131,6 @@ func parseGcloudConfig(path string) (account, project string) {
 			}
 		}
 
-		// Early exit if we have both
 		if account != "" && project != "" {
 			return
 		}
@@ -156,7 +139,6 @@ func parseGcloudConfig(path string) (account, project string) {
 	return
 }
 
-// shortenEmail shortens an email to just the username part
 func shortenEmail(email string) string {
 	if idx := strings.Index(email, "@"); idx > 0 {
 		return email[:idx]

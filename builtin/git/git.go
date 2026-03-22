@@ -13,95 +13,39 @@ import (
 	"github.com/hergert/ccsl/internal/types"
 )
 
-// Render provides git status using a single command
-func Render(ctx context.Context, ctxObj map[string]any) types.Segment {
-	// Check if untracked files should be shown (default: no for speed)
-	args := []string{"status", "--porcelain=v2", "--branch", "--untracked-files=no"}
-	if cfg, ok := ctx.Value(types.CtxKeyConfig).(*config.Config); ok {
-		if pcfg, exists := cfg.Plugin["git"]; exists && pcfg.Untracked {
-			args = []string{"status", "--porcelain=v2", "--branch"}
-		}
-	}
+type Status struct {
+	Branch   string
+	Dirty    bool
+	Ahead    int
+	Behind   int
+	HasStash bool
+}
 
-	cmd := exec.CommandContext(ctx, "git", args...)
-	out, err := cmd.Output()
-	if err != nil {
-		return types.Segment{}
-	}
-
-	var branch string
-	var ahead, behind int
-	dirty := false
-
-	for _, line := range strings.Split(string(out), "\n") {
-		switch {
-		case strings.HasPrefix(line, "# branch.head "):
-			branch = strings.TrimPrefix(line, "# branch.head ")
-		case strings.HasPrefix(line, "# branch.ab "):
-			// format: # branch.ab +N -M
-			parts := strings.Fields(line)
-			for _, p := range parts {
-				if strings.HasPrefix(p, "+") {
-					fmt.Sscanf(p, "+%d", &ahead)
-				} else if strings.HasPrefix(p, "-") {
-					fmt.Sscanf(p, "-%d", &behind)
-				}
-			}
-		case len(line) > 0 && line[0] != '#':
-			dirty = true
-		}
-	}
-
-	if branch == "" || branch == "(detached)" {
-		// Try to get short hash for detached HEAD
-		cmd := exec.CommandContext(ctx, "git", "rev-parse", "--short", "HEAD")
-		if out, err := cmd.Output(); err == nil {
-			branch = strings.TrimSpace(string(out))
-		}
-	}
-
-	if branch == "" {
-		return types.Segment{}
-	}
-
-	// Check for stash (fast file stat)
-	hasStash := false
-	if gitDir := findGitDir(ctx); gitDir != "" {
-		if _, err := os.Stat(filepath.Join(gitDir, "refs", "stash")); err == nil {
-			hasStash = true
-		}
-	}
-
-	text := branch
-	if dirty {
+func (s Status) Render(ansi bool) types.Segment {
+	text := s.Branch
+	if s.Dirty {
 		text += "*"
 	}
-
-	// Sync indicators with meaningful colors (respect ANSI config)
-	ansi := true
-	if cfg, ok := ctx.Value(types.CtxKeyConfig).(*config.Config); ok {
-		ansi = cfg.Theme.ANSI
-	}
-	if ahead > 0 {
-		s := fmt.Sprintf("⇡%d", ahead)
+	if s.Ahead > 0 {
+		ind := fmt.Sprintf("⇡%d", s.Ahead)
 		if ansi {
-			s = palette.Yellow + s + palette.Reset
+			ind = palette.Yellow + ind + palette.Reset
 		}
-		text += s
+		text += ind
 	}
-	if behind > 0 {
-		s := fmt.Sprintf("⇣%d", behind)
+	if s.Behind > 0 {
+		ind := fmt.Sprintf("⇣%d", s.Behind)
 		if ansi {
-			s = palette.Red + s + palette.Reset
+			ind = palette.Red + ind + palette.Reset
 		}
-		text += s
+		text += ind
 	}
-	if hasStash {
-		s := "≡"
+	if s.HasStash {
+		ind := "≡"
 		if ansi {
-			s = palette.Dim + s + palette.Reset
+			ind = palette.Dim + ind + palette.Reset
 		}
-		text += s
+		text += ind
 	}
 
 	return types.Segment{
@@ -111,7 +55,57 @@ func Render(ctx context.Context, ctxObj map[string]any) types.Segment {
 	}
 }
 
-// findGitDir returns the .git directory path
+func Collect(ctx context.Context, cfg *config.Config) (Status, bool) {
+	args := []string{"status", "--porcelain=v2", "--branch", "--untracked-files=no"}
+	if pcfg, exists := cfg.Plugin["git"]; exists && pcfg.Untracked {
+		args = []string{"status", "--porcelain=v2", "--branch"}
+	}
+
+	cmd := exec.CommandContext(ctx, "git", args...)
+	out, err := cmd.Output()
+	if err != nil {
+		return Status{}, false
+	}
+
+	s := Status{}
+	for _, line := range strings.Split(string(out), "\n") {
+		switch {
+		case strings.HasPrefix(line, "# branch.head "):
+			s.Branch = strings.TrimPrefix(line, "# branch.head ")
+		case strings.HasPrefix(line, "# branch.ab "):
+			parts := strings.Fields(line)
+			for _, p := range parts {
+				if strings.HasPrefix(p, "+") {
+					fmt.Sscanf(p, "+%d", &s.Ahead)
+				} else if strings.HasPrefix(p, "-") {
+					fmt.Sscanf(p, "-%d", &s.Behind)
+				}
+			}
+		case len(line) > 0 && line[0] != '#':
+			s.Dirty = true
+		}
+	}
+
+	if s.Branch == "" || s.Branch == "(detached)" {
+		cmd := exec.CommandContext(ctx, "git", "rev-parse", "--short", "HEAD")
+		if out, err := cmd.Output(); err == nil {
+			s.Branch = strings.TrimSpace(string(out))
+		}
+	}
+
+	if s.Branch == "" {
+		return Status{}, false
+	}
+
+	if gitDir := findGitDir(ctx); gitDir != "" {
+		if _, err := os.Stat(filepath.Join(gitDir, "refs", "stash")); err == nil {
+			s.HasStash = true
+		}
+	}
+
+	return s, true
+}
+
 func findGitDir(ctx context.Context) string {
 	cmd := exec.CommandContext(ctx, "git", "rev-parse", "--git-dir")
 	out, err := cmd.Output()

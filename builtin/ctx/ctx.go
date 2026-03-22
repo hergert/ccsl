@@ -1,68 +1,78 @@
 package ctx
 
 import (
-	"context"
 	"fmt"
 
 	"github.com/hergert/ccsl/internal/types"
 )
 
-// Render extracts context window usage from Claude Code's stdin JSON
-func Render(_ context.Context, ctxObj map[string]any) types.Segment {
-	cw, ok := ctxObj["context_window"].(map[string]any)
+type ContextWindow struct {
+	UsedPct       float64
+	WindowSize    float64
+	Exceeds200k   bool
+}
+
+func Parse(raw map[string]any) (ContextWindow, bool) {
+	cw, ok := raw["context_window"].(map[string]any)
 	if !ok {
-		return types.Segment{}
+		return ContextWindow{}, false
 	}
 
-	var pct float64
-	size, _ := cw["context_window_size"].(float64)
+	c := ContextWindow{}
+	c.WindowSize, _ = cw["context_window_size"].(float64)
+	c.Exceeds200k, _ = raw["exceeds_200k_tokens"].(bool)
 
-	// Try used_percentage first
 	if p, ok := cw["used_percentage"].(float64); ok && p > 0 {
-		pct = p
+		c.UsedPct = p
 	} else {
-		// Fallback: calculate from tokens
 		input, _ := cw["total_input_tokens"].(float64)
 		output, _ := cw["total_output_tokens"].(float64)
-		if size > 0 {
-			pct = ((input + output) / size) * 100
+		if c.WindowSize > 0 {
+			c.UsedPct = ((input + output) / c.WindowSize) * 100
 		}
 	}
 
-	if pct == 0 {
-		return types.Segment{}
+	if c.UsedPct == 0 {
+		return ContextWindow{}, false
 	}
+	return c, true
+}
 
-	// Anthropic's MRCR v2 benchmark: Opus drops from 93% (256K) to 76% (1M).
-	// User reports (github.com/anthropics/claude-code/issues/35296, #34685):
-	//   20-40% of 1M: degradation starts, wrong approaches
-	//   40-60%: fabrications, confident false conclusions
-	//   60%+:   prior facts inaccessible, irrecoverable loops
-	// Effective useful context is ~200-400K tokens regardless of window size.
-	// 1M thresholds are therefore more aggressive, not less.
-	large := size >= 500000
-	exceeds200k, _ := ctxObj["exceeds_200k_tokens"].(bool)
+func (c ContextWindow) IsLarge() bool {
+	return c.WindowSize >= 500000
+}
 
-	style := "dim"
-	if large {
+// Anthropic's MRCR v2 benchmark: Opus drops from 93% (256K) to 76% (1M).
+// User reports (github.com/anthropics/claude-code/issues/35296, #34685):
+//   20-40% of 1M: degradation starts, wrong approaches
+//   40-60%: fabrications, confident false conclusions
+//   60%+:   prior facts inaccessible, irrecoverable loops
+// Effective useful context is ~200-400K tokens regardless of window size.
+// 1M thresholds are therefore more aggressive, not less.
+func (c ContextWindow) severity() string {
+	if c.IsLarge() {
 		// 30% of 1M = 300K tokens (degradation onset)
 		// 60% of 1M = 600K tokens (reliability lost)
 		switch {
-		case pct >= 60:
-			style = "red"
-		case pct >= 30:
-			style = "yellow"
+		case c.UsedPct >= 60:
+			return "red"
+		case c.UsedPct >= 30:
+			return "yellow"
 		}
 	} else {
 		switch {
-		case pct >= 85 || exceeds200k:
-			style = "red"
-		case pct >= 50:
-			style = "yellow"
+		case c.UsedPct >= 85 || c.Exceeds200k:
+			return "red"
+		case c.UsedPct >= 50:
+			return "yellow"
 		}
 	}
+	return "dim"
+}
 
-	text := fmt.Sprintf("%.0f%%", pct)
+func (c ContextWindow) Render() types.Segment {
+	style := c.severity()
+	text := fmt.Sprintf("%.0f%%", c.UsedPct)
 	if style == "red" {
 		text += "!"
 	}

@@ -1,11 +1,9 @@
 package palette
 
 import (
-	"context"
 	"strings"
 
 	"github.com/hergert/ccsl/internal/config"
-	"github.com/hergert/ccsl/internal/types"
 )
 
 const (
@@ -20,7 +18,7 @@ type Palette struct {
 	ansi bool
 }
 
-func From(cfg *config.Config, _ map[string]any) *Palette {
+func From(cfg *config.Config) *Palette {
 	return &Palette{ansi: cfg.Theme.ANSI}
 }
 
@@ -44,11 +42,4 @@ func (p *Palette) Apply(text, style string) string {
 		}
 		return text
 	}
-}
-
-func IconsEnabled(ctx context.Context) bool {
-	if cfg, ok := ctx.Value(types.CtxKeyConfig).(*config.Config); ok {
-		return cfg.Theme.Icons
-	}
-	return true
 }

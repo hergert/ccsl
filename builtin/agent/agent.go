@@ -1,25 +1,26 @@
 package agent
 
-import (
-	"context"
+import "github.com/hergert/ccsl/internal/types"
 
-	"github.com/hergert/ccsl/internal/types"
-)
+type Agent struct {
+	Name string
+}
 
-// Render extracts the agent name from Claude Code's stdin JSON
-func Render(ctx context.Context, ctxObj map[string]any) types.Segment {
-	agentData, ok := ctxObj["agent"].(map[string]any)
+func Parse(raw map[string]any) (Agent, bool) {
+	data, ok := raw["agent"].(map[string]any)
 	if !ok {
-		return types.Segment{}
+		return Agent{}, false
 	}
-
-	name, ok := agentData["name"].(string)
+	name, ok := data["name"].(string)
 	if !ok || name == "" {
-		return types.Segment{}
+		return Agent{}, false
 	}
+	return Agent{Name: name}, true
+}
 
+func (a Agent) Render() types.Segment {
 	return types.Segment{
-		Text:     name,
+		Text:     a.Name,
 		Style:    "bold",
 		Priority: 85,
 	}

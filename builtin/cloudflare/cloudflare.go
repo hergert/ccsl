@@ -1,7 +1,6 @@
 package cloudflare
 
 import (
-	"context"
 	"encoding/json"
 	"os"
 	"path/filepath"
@@ -12,7 +11,6 @@ import (
 	"github.com/BurntSushi/toml"
 )
 
-// wranglerConfig holds relevant fields from wrangler.toml/json
 type wranglerConfig struct {
 	Name      string                    `json:"name" toml:"name"`
 	AccountID string                    `json:"account_id" toml:"account_id"`
@@ -24,11 +22,9 @@ type wranglerEnvCfg struct {
 	AccountID string `json:"account_id" toml:"account_id"`
 }
 
-// Render returns Cloudflare account/project info from env vars and wrangler config.
-func Render(ctx context.Context, ctxObj map[string]any) types.Segment {
-	// Get workspace directories from Claude's context
+func Render(raw map[string]any) types.Segment {
 	var currentDir, projectDir string
-	if ws, ok := ctxObj["workspace"].(map[string]any); ok {
+	if ws, ok := raw["workspace"].(map[string]any); ok {
 		if dir, ok := ws["current_dir"].(string); ok {
 			currentDir = dir
 		}
@@ -37,13 +33,10 @@ func Render(ctx context.Context, ctxObj map[string]any) types.Segment {
 		}
 	}
 
-	// Find nearest wrangler config (walk current_dir → project_dir)
 	cfg, _ := findWranglerConfig(currentDir, projectDir)
 
-	// Resolve env
 	envName := os.Getenv("CLOUDFLARE_ENV")
 
-	// Apply env-specific overrides from config
 	if envName != "" && cfg.Env != nil {
 		if envCfg, ok := cfg.Env[envName]; ok {
 			if envCfg.Name != "" {
@@ -57,19 +50,16 @@ func Render(ctx context.Context, ctxObj map[string]any) types.Segment {
 
 	projectName := cfg.Name
 
-	// Nothing to show if no project
 	if projectName == "" {
 		return types.Segment{}
 	}
 
-	// Build compact output: cf:project or cf:project@env
 	text := "cf:" + projectName
 
 	if envName != "" {
 		text += "@" + envName
 	}
 
-	// Check for mismatch between process env and config
 	envAccountID := getEnvAccountID()
 	if envAccountID != "" && cfg.AccountID != "" && envAccountID != cfg.AccountID {
 		text += "⚠"
@@ -82,7 +72,7 @@ func Render(ctx context.Context, ctxObj map[string]any) types.Segment {
 	}
 }
 
-// getEnvAccountID checks both new and deprecated env var names
+// Checks both current and deprecated env var names.
 func getEnvAccountID() string {
 	if id := os.Getenv("CLOUDFLARE_ACCOUNT_ID"); id != "" {
 		return id
@@ -90,14 +80,12 @@ func getEnvAccountID() string {
 	return os.Getenv("CF_ACCOUNT_ID")
 }
 
-// findWranglerConfig walks from currentDir up to projectDir looking for wrangler config
-// Returns the config and the directory where it was found
 func findWranglerConfig(currentDir, projectDir string) (wranglerConfig, string) {
 	candidates := []string{"wrangler.toml", "wrangler.json", "wrangler.jsonc"}
 
 	dir := currentDir
 	for {
-		// Check for .wrangler/deploy/config.json redirect first
+		// .wrangler/deploy/config.json can redirect to the actual config
 		redirectPath := filepath.Join(dir, ".wrangler", "deploy", "config.json")
 		if data, err := os.ReadFile(redirectPath); err == nil {
 			var redirect struct {
@@ -111,7 +99,6 @@ func findWranglerConfig(currentDir, projectDir string) (wranglerConfig, string) 
 			}
 		}
 
-		// Try standard config file names
 		for _, name := range candidates {
 			path := filepath.Join(dir, name)
 			if cfg := parseWranglerConfig(path); cfg.Name != "" || cfg.AccountID != "" {
@@ -119,7 +106,6 @@ func findWranglerConfig(currentDir, projectDir string) (wranglerConfig, string) 
 			}
 		}
 
-		// Stop at project_dir boundary
 		if dir == projectDir || dir == "/" || dir == "." {
 			break
 		}
@@ -133,7 +119,6 @@ func findWranglerConfig(currentDir, projectDir string) (wranglerConfig, string) 
 	return wranglerConfig{}, ""
 }
 
-// parseWranglerConfig parses a wrangler config file (toml or json/jsonc)
 func parseWranglerConfig(path string) wranglerConfig {
 	data, err := os.ReadFile(path)
 	if err != nil {
@@ -150,7 +135,6 @@ func parseWranglerConfig(path string) wranglerConfig {
 	return cfg
 }
 
-// stripJSONComments removes // and /* */ comments for JSONC support
 func stripJSONComments(s string) string {
 	var result strings.Builder
 	i := 0

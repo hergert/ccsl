@@ -1,29 +1,39 @@
 package worktree
 
-import (
-	"context"
+import "github.com/hergert/ccsl/internal/types"
 
-	"github.com/hergert/ccsl/internal/types"
-)
+type Worktree struct {
+	Name   string
+	Branch string
+}
 
-// Render extracts worktree info from Claude Code's stdin JSON
-// Only present when running in a --worktree session
-func Render(_ context.Context, ctxObj map[string]any) types.Segment {
-	wt, ok := ctxObj["worktree"].(map[string]any)
+// Only present when running in a --worktree session.
+func Parse(raw map[string]any) (Worktree, bool) {
+	data, ok := raw["worktree"].(map[string]any)
 	if !ok {
-		return types.Segment{}
+		return Worktree{}, false
 	}
 
-	name, _ := wt["name"].(string)
-	if name == "" {
-		name, _ = wt["branch"].(string)
-	}
-	if name == "" {
-		return types.Segment{}
-	}
+	w := Worktree{}
+	w.Name, _ = data["name"].(string)
+	w.Branch, _ = data["branch"].(string)
 
+	if w.Name == "" && w.Branch == "" {
+		return Worktree{}, false
+	}
+	return w, true
+}
+
+func (w Worktree) DisplayName() string {
+	if w.Name != "" {
+		return w.Name
+	}
+	return w.Branch
+}
+
+func (w Worktree) Render() types.Segment {
 	return types.Segment{
-		Text:     name,
+		Text:     w.DisplayName(),
 		Style:    "bold",
 		Priority: 83,
 	}

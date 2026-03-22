@@ -12,80 +12,59 @@ import (
 	"github.com/hergert/ccsl/internal/runner"
 )
 
-func TestBasicFunctionality(t *testing.T) {
+func isolatedConfig(t *testing.T) *config.Config {
+	t.Helper()
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 	t.Setenv("HOME", t.TempDir())
+	return config.Load()
+}
 
-	// Create a minimal test configuration
-	cfg := config.Load()
+func TestBasicFunctionality(t *testing.T) {
+	cfg := isolatedConfig(t)
 
-	// Sample Claude JSON input
 	claudeJSON := []byte(`{
-		"model": {
-			"id": "claude-test",
-			"display_name": "Test Model"
-		},
-		"workspace": {
-			"current_dir": "/tmp/test",
-			"project_dir": "/tmp/test"
-		}
+		"model": {"id": "claude-test", "display_name": "Test Model"},
+		"workspace": {"current_dir": "/tmp/test", "project_dir": "/tmp/test"}
 	}`)
 
 	var ctxObj map[string]any
 	json.Unmarshal(claudeJSON, &ctxObj)
 
-	// Test runner.Collect
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 	defer cancel()
 
 	segments := runner.Collect(ctx, ctxObj, claudeJSON, cfg)
-
-	// Should have at least model and cwd segments
 	if len(segments) < 2 {
 		t.Errorf("Expected at least 2 segments, got %d", len(segments))
 	}
 
-	// Test render.Line
-	pal := palette.From(cfg, map[string]any{})
-	line := render.Line(cfg.UI.Template, segments, pal, cfg.UI.Truncate)
-
+	line := render.Line(cfg.UI.Template, segments, palette.From(cfg), cfg.UI.Truncate)
 	if line == "" {
 		t.Error("Expected non-empty line output")
 	}
-
 	t.Logf("Generated line: %s", line)
 }
 
 func TestConfigLoading(t *testing.T) {
-	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
-	t.Setenv("HOME", t.TempDir())
-
-	cfg := config.Load()
+	cfg := isolatedConfig(t)
 
 	if cfg == nil {
 		t.Fatal("Config should not be nil")
 	}
-
-	// Order can be nil (derive from template) or explicit
-	// Just verify we have a valid template to derive from
 	if cfg.UI.Template == "" && len(cfg.Plugins.Order) == 0 {
 		t.Error("Expected either template or explicit plugin order")
 	}
-
 	if cfg.UI.Template == "" {
 		t.Error("Expected default template")
 	}
 }
 
 func TestSegmentGeneration(t *testing.T) {
-	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
-	t.Setenv("HOME", t.TempDir())
-
 	testCases := []struct {
 		name     string
 		input    string
-		template string   // override template, empty = default
-		expected []string // segment IDs we expect
+		template string
+		expected []string
 	}{
 		{
 			name: "basic model and workspace",
@@ -129,7 +108,7 @@ func TestSegmentGeneration(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			cfg := config.Load()
+			cfg := isolatedConfig(t)
 			if tc.template != "" {
 				cfg.UI.Template = tc.template
 			}

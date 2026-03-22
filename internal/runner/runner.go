@@ -27,13 +27,11 @@ import (
 	"github.com/hergert/ccsl/internal/types"
 )
 
-const maxPluginStdout = 4096 // 4KiB cap for exec plugin stdout
+const maxPluginStdout = 4096
 
-// limitedWriter wraps an io.Writer with a byte limit
 type limitedWriter struct {
-	w     io.Writer
-	n     int // bytes remaining
-	wrote int // bytes written
+	w io.Writer
+	n int
 }
 
 func (l *limitedWriter) Write(p []byte) (int, error) {
@@ -45,14 +43,12 @@ func (l *limitedWriter) Write(p []byte) (int, error) {
 	}
 	n, err := l.w.Write(p)
 	l.n -= n
-	l.wrote += n
 	return n, err
 }
 
 var segmentRe = regexp.MustCompile(`\{([-\w:.]+)`)
 
-// ParseSegments extracts segment IDs from a template string
-func ParseSegments(template string) []string {
+func parseSegments(template string) []string {
 	matches := segmentRe.FindAllStringSubmatch(template, -1)
 	seen := make(map[string]bool)
 	var result []string
@@ -66,13 +62,11 @@ func ParseSegments(template string) []string {
 	return result
 }
 
-// Collect runs segments derived from template in parallel
 func Collect(ctx context.Context, ctxObj map[string]any, claudeJSON []byte, cfg *config.Config) []types.Segment {
 
-	// Derive segments from template (or use explicit order if set)
 	segmentIDs := cfg.Plugins.Order
 	if len(segmentIDs) == 0 {
-		segmentIDs = ParseSegments(cfg.UI.Template)
+		segmentIDs = parseSegments(cfg.UI.Template)
 	}
 
 	var wg sync.WaitGroup
@@ -91,13 +85,12 @@ func Collect(ctx context.Context, ctxObj map[string]any, claudeJSON []byte, cfg 
 
 			pctx, cancel := context.WithTimeout(ctx, timeout)
 			defer cancel()
-			pctx = context.WithValue(pctx, types.CtxKeyConfig, cfg)
 
 			var seg types.Segment
 			if pcfg.Type == "exec" && pcfg.Command != "" {
 				seg = runExec(pctx, pcfg, claudeJSON)
 			} else {
-				seg = runBuiltin(pctx, id, ctxObj)
+				seg = runBuiltin(pctx, id, ctxObj, cfg)
 			}
 
 			seg.ID = id
@@ -122,35 +115,50 @@ func Collect(ctx context.Context, ctxObj map[string]any, claudeJSON []byte, cfg 
 	return segments
 }
 
-func runBuiltin(ctx context.Context, id string, ctxObj map[string]any) types.Segment {
+func runBuiltin(ctx context.Context, id string, raw map[string]any, cfg *config.Config) types.Segment {
 	switch id {
 	case "model":
-		return model.Render(ctx, ctxObj)
+		return model.Parse(raw).Render()
 	case "cwd":
-		return cwd.Render(ctx, ctxObj)
+		return cwd.Parse(raw).Render()
 	case "git":
-		return git.Render(ctx, ctxObj)
+		if s, ok := git.Collect(ctx, cfg); ok {
+			return s.Render(cfg.Theme.ANSI)
+		}
 	case "cost":
-		return cost.Render(ctx, ctxObj)
+		if s, ok := cost.Parse(raw); ok {
+			return s.Render()
+		}
 	case "ctx":
-		return ctxbuiltin.Render(ctx, ctxObj)
+		if c, ok := ctxbuiltin.Parse(raw); ok {
+			return c.Render()
+		}
 	case "gcp":
-		return gcp.Render(ctx, ctxObj)
+		return gcp.Render(raw)
 	case "cf", "cloudflare":
-		return cloudflare.Render(ctx, ctxObj)
+		return cloudflare.Render(raw)
 	case "agent":
-		return agent.Render(ctx, ctxObj)
+		if a, ok := agent.Parse(raw); ok {
+			return a.Render()
+		}
 	case "duration":
-		return duration.Render(ctx, ctxObj)
+		if d, ok := duration.Parse(raw); ok {
+			return d.Render()
+		}
 	case "ratelimit":
-		return ratelimit.Render(ctx, ctxObj)
+		if l, ok := ratelimit.Parse(raw); ok {
+			return l.Render()
+		}
 	case "worktree":
-		return worktree.Render(ctx, ctxObj)
+		if w, ok := worktree.Parse(raw); ok {
+			return w.Render()
+		}
 	case "lines":
-		return lines.Render(ctx, ctxObj)
-	default:
-		return types.Segment{}
+		if c, ok := lines.Parse(raw); ok {
+			return c.Render()
+		}
 	}
+	return types.Segment{}
 }
 
 func runExec(ctx context.Context, pcfg config.PluginConfig, claudeJSON []byte) types.Segment {

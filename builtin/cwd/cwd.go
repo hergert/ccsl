@@ -1,42 +1,40 @@
 package cwd
 
 import (
-	"context"
 	"os"
 	"path/filepath"
 
 	"github.com/hergert/ccsl/internal/types"
 )
 
-// Render shows the basename of the current working directory
-func Render(ctx context.Context, ctxObj map[string]any) types.Segment {
-	var currentDir string
+type Dir struct {
+	Path string
+}
 
-	// Try to get from Claude context first
-	if workspace, ok := ctxObj["workspace"].(map[string]any); ok {
-		if dir, ok := workspace["current_dir"].(string); ok {
-			currentDir = dir
+func Parse(raw map[string]any) Dir {
+	if ws, ok := raw["workspace"].(map[string]any); ok {
+		if dir, ok := ws["current_dir"].(string); ok && dir != "" {
+			return Dir{Path: dir}
 		}
 	}
-
-	// Fallback to actual cwd
-	if currentDir == "" {
-		if dir, err := os.Getwd(); err == nil {
-			currentDir = dir
-		}
+	if dir, err := os.Getwd(); err == nil {
+		return Dir{Path: dir}
 	}
+	return Dir{}
+}
 
-	if currentDir == "" {
+func (d Dir) Render() types.Segment {
+	if d.Path == "" {
 		return types.Segment{}
 	}
 
-	dirName := filepath.Base(currentDir)
-	if dirName == "" || dirName == "/" {
-		dirName = currentDir
+	name := filepath.Base(d.Path)
+	if name == "" || name == "/" {
+		name = d.Path
 	}
 
 	return types.Segment{
-		Text:     dirName,
-		Priority: 80, // high priority
+		Text:     name,
+		Priority: 80,
 	}
 }

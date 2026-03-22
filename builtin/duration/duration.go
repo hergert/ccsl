@@ -1,37 +1,43 @@
 package duration
 
 import (
-	"context"
 	"fmt"
+	"time"
 
 	"github.com/hergert/ccsl/internal/types"
 )
 
-// Render extracts total duration from Claude Code's stdin JSON
-func Render(ctx context.Context, ctxObj map[string]any) types.Segment {
-	costData, ok := ctxObj["cost"].(map[string]any)
+type Duration struct {
+	Elapsed time.Duration
+}
+
+func Parse(raw map[string]any) (Duration, bool) {
+	data, ok := raw["cost"].(map[string]any)
 	if !ok {
-		return types.Segment{}
+		return Duration{}, false
 	}
 
-	ms, ok := costData["total_duration_ms"].(float64)
+	ms, ok := data["total_duration_ms"].(float64)
 	if !ok || ms <= 0 {
-		return types.Segment{}
+		return Duration{}, false
 	}
 
-	secs := int(ms / 1000)
-	minutes := secs / 60
-	hours := minutes / 60
-	mins := minutes % 60
+	return Duration{Elapsed: time.Duration(ms) * time.Millisecond}, true
+}
+
+func (d Duration) Render() types.Segment {
+	total := int(d.Elapsed.Minutes())
+	hours := total / 60
+	mins := total % 60
 
 	var text string
 	switch {
 	case hours > 0:
 		text = fmt.Sprintf("%dh%dm", hours, mins)
-	case minutes > 0:
+	case mins > 0:
 		text = fmt.Sprintf("%dm", mins)
 	default:
-		text = fmt.Sprintf("%ds", secs)
+		text = fmt.Sprintf("%ds", int(d.Elapsed.Seconds()))
 	}
 
 	return types.Segment{

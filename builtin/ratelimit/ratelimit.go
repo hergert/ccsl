@@ -1,7 +1,6 @@
 package ratelimit
 
 import (
-	"context"
 	"fmt"
 	"strings"
 	"time"
@@ -9,50 +8,84 @@ import (
 	"github.com/hergert/ccsl/internal/types"
 )
 
-// Render extracts rate limit usage from Claude Code's stdin JSON
-// Only present for Claude.ai Pro/Max subscribers after first API response
-func Render(_ context.Context, ctxObj map[string]any) types.Segment {
-	rl, ok := ctxObj["rate_limits"].(map[string]any)
+type Window struct {
+	UsedPct  float64
+	ResetsAt time.Time
+	Label    string // superscript label: "⁵ʰ" or "⁷ᵈ"
+}
+
+type Limits struct {
+	FiveHour *Window
+	SevenDay *Window
+}
+
+// Only present for Claude.ai Pro/Max subscribers after first API response.
+func Parse(raw map[string]any) (Limits, bool) {
+	rl, ok := raw["rate_limits"].(map[string]any)
 	if !ok {
-		return types.Segment{}
+		return Limits{}, false
 	}
 
-	var parts []string
-	var maxPct float64
-
+	l := Limits{}
 	if fh, ok := rl["five_hour"].(map[string]any); ok {
 		if pct, ok := fh["used_percentage"].(float64); ok {
-			s := fmt.Sprintf("%.0f%%", pct) + "⁵ʰ"
+			w := &Window{UsedPct: pct, Label: "⁵ʰ"}
 			if resetAt, ok := fh["resets_at"].(float64); ok {
-				if remaining := time.Until(time.Unix(int64(resetAt), 0)); remaining > 0 && pct >= 70 {
-					s += fmt.Sprintf("↻%s", fmtDuration(remaining))
-				}
+				w.ResetsAt = time.Unix(int64(resetAt), 0)
 			}
-			parts = append(parts, s)
-			if pct > maxPct {
-				maxPct = pct
-			}
+			l.FiveHour = w
 		}
 	}
-
 	if sd, ok := rl["seven_day"].(map[string]any); ok {
 		if pct, ok := sd["used_percentage"].(float64); ok {
-			parts = append(parts, fmt.Sprintf("%.0f%%", pct)+"⁷ᵈ")
-			if pct > maxPct {
-				maxPct = pct
-			}
+			l.SevenDay = &Window{UsedPct: pct, Label: "⁷ᵈ"}
 		}
 	}
 
-	if len(parts) == 0 {
-		return types.Segment{}
+	if l.FiveHour == nil && l.SevenDay == nil {
+		return Limits{}, false
+	}
+	return l, true
+}
+
+func (w *Window) format() string {
+	s := fmt.Sprintf("%.0f%%", w.UsedPct) + w.Label
+	if remaining := time.Until(w.ResetsAt); remaining > 0 && w.UsedPct >= 70 {
+		m := int(remaining.Minutes())
+		if m >= 60 {
+			s += fmt.Sprintf("↻%dh%dm", m/60, m%60)
+		} else {
+			s += fmt.Sprintf("↻%dm", m)
+		}
+	}
+	return s
+}
+
+func (l Limits) maxPct() float64 {
+	var max float64
+	if l.FiveHour != nil && l.FiveHour.UsedPct > max {
+		max = l.FiveHour.UsedPct
+	}
+	if l.SevenDay != nil && l.SevenDay.UsedPct > max {
+		max = l.SevenDay.UsedPct
+	}
+	return max
+}
+
+func (l Limits) Render() types.Segment {
+	var parts []string
+	if l.FiveHour != nil {
+		parts = append(parts, l.FiveHour.format())
+	}
+	if l.SevenDay != nil {
+		parts = append(parts, l.SevenDay.format())
 	}
 
 	style := "dim"
 	switch {
-	case maxPct >= 90:
+	case l.maxPct() >= 90:
 		style = "red"
-	case maxPct >= 70:
+	case l.maxPct() >= 70:
 		style = "yellow"
 	}
 
@@ -61,12 +94,4 @@ func Render(_ context.Context, ctxObj map[string]any) types.Segment {
 		Style:    style,
 		Priority: 30,
 	}
-}
-
-func fmtDuration(d time.Duration) string {
-	m := int(d.Minutes())
-	if m >= 60 {
-		return fmt.Sprintf("%dh%dm", m/60, m%60)
-	}
-	return fmt.Sprintf("%dm", m)
 }

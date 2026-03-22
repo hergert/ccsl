@@ -1,23 +1,29 @@
 package model
 
 import (
-	"context"
 	"strings"
 
 	"github.com/hergert/ccsl/internal/types"
 )
 
-// Render extracts the model's display name
-func Render(ctx context.Context, ctxObj map[string]any) types.Segment {
-	text := "Claude" // default
-	if model, ok := ctxObj["model"].(map[string]any); ok {
-		if name, ok := model["display_name"].(string); ok && name != "" {
-			text = strings.TrimSpace(name)
+type Model struct {
+	DisplayName string
+}
+
+func Parse(raw map[string]any) Model {
+	m := Model{DisplayName: "Claude"}
+	if data, ok := raw["model"].(map[string]any); ok {
+		if name, ok := data["display_name"].(string); ok && name != "" {
+			m.DisplayName = strings.TrimSpace(name)
 		}
 	}
+	return m
+}
+
+func (m Model) Render() types.Segment {
 	return types.Segment{
-		Text:     text,
+		Text:     m.DisplayName,
 		Style:    "bold",
-		Priority: 90, // high priority
+		Priority: 90,
 	}
 }
