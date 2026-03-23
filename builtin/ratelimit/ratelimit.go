@@ -5,6 +5,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/hergert/ccsl/internal/palette"
 	"github.com/hergert/ccsl/internal/types"
 )
 
@@ -48,7 +49,18 @@ func Parse(raw map[string]any) (Limits, bool) {
 	return l, true
 }
 
-func (w *Window) format() string {
+func (w *Window) severity() string {
+	switch {
+	case w.UsedPct >= 90:
+		return "red"
+	case w.UsedPct >= 70:
+		return "yellow"
+	default:
+		return ""
+	}
+}
+
+func (w *Window) format(ansi bool) string {
 	s := fmt.Sprintf("%.0f%%", w.UsedPct) + w.Label
 	if remaining := time.Until(w.ResetsAt); remaining > 0 && w.UsedPct >= 70 {
 		m := int(remaining.Minutes())
@@ -58,40 +70,29 @@ func (w *Window) format() string {
 			s += fmt.Sprintf("↻%dm", m)
 		}
 	}
+	if ansi {
+		switch w.severity() {
+		case "red":
+			s = palette.Red + s + palette.Reset
+		case "yellow":
+			s = palette.Yellow + s + palette.Reset
+		}
+	}
 	return s
 }
 
-func (l Limits) maxPct() float64 {
-	var max float64
-	if l.FiveHour != nil && l.FiveHour.UsedPct > max {
-		max = l.FiveHour.UsedPct
-	}
-	if l.SevenDay != nil && l.SevenDay.UsedPct > max {
-		max = l.SevenDay.UsedPct
-	}
-	return max
-}
-
-func (l Limits) Render() types.Segment {
+func (l Limits) Render(ansi bool) types.Segment {
 	var parts []string
 	if l.FiveHour != nil {
-		parts = append(parts, l.FiveHour.format())
+		parts = append(parts, l.FiveHour.format(ansi))
 	}
 	if l.SevenDay != nil {
-		parts = append(parts, l.SevenDay.format())
-	}
-
-	style := "dim"
-	switch {
-	case l.maxPct() >= 90:
-		style = "red"
-	case l.maxPct() >= 70:
-		style = "yellow"
+		parts = append(parts, l.SevenDay.format(ansi))
 	}
 
 	return types.Segment{
 		Text:     strings.Join(parts, " "),
-		Style:    style,
+		Style:    "dim",
 		Priority: 30,
 	}
 }

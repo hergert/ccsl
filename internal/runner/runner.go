@@ -147,7 +147,7 @@ func runBuiltin(ctx context.Context, id string, raw map[string]any, cfg *config.
 		}
 	case "ratelimit":
 		if l, ok := ratelimit.Parse(raw); ok {
-			return l.Render()
+			return l.Render(cfg.Theme.ANSI)
 		}
 	case "worktree":
 		if w, ok := worktree.Parse(raw); ok {
