@@ -28,7 +28,7 @@ func TestBasicFunctionality(t *testing.T) {
 	}`)
 
 	var ctxObj map[string]any
-	json.Unmarshal(claudeJSON, &ctxObj)
+	_ = json.Unmarshal(claudeJSON, &ctxObj)
 
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 	defer cancel()
@@ -50,6 +50,7 @@ func TestConfigLoading(t *testing.T) {
 
 	if cfg == nil {
 		t.Fatal("Config should not be nil")
+		return
 	}
 	if cfg.UI.Template == "" && len(cfg.Plugins.Order) == 0 {
 		t.Error("Expected either template or explicit plugin order")
@@ -113,7 +114,7 @@ func TestSegmentGeneration(t *testing.T) {
 				cfg.UI.Template = tc.template
 			}
 			var ctxObj map[string]any
-			json.Unmarshal([]byte(tc.input), &ctxObj)
+			_ = json.Unmarshal([]byte(tc.input), &ctxObj)
 			segments := runner.Collect(ctx, ctxObj, []byte(tc.input), cfg)
 
 			segmentIDs := make(map[string]bool)

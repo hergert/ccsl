@@ -34,11 +34,8 @@ func Render(raw map[string]any) types.Segment {
 		return types.Segment{}
 	}
 
-	mismatch := false
-	if (envAccount != "" && fileAccount != "" && envAccount != fileAccount) ||
-		(envProject != "" && fileProject != "" && envProject != fileProject) {
-		mismatch = true
-	}
+	mismatch := (envAccount != "" && fileAccount != "" && envAccount != fileAccount) ||
+		(envProject != "" && fileProject != "" && envProject != fileProject)
 
 	text := "gcp:"
 	if project != "" {
@@ -103,7 +100,7 @@ func parseGcloudConfig(path string) (account, project string) {
 	if err != nil {
 		return
 	}
-	defer file.Close()
+	defer func() { _ = file.Close() }()
 
 	inCore := false
 	scanner := bufio.NewScanner(file)

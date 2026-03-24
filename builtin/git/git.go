@@ -76,9 +76,9 @@ func Collect(ctx context.Context, cfg *config.Config) (Status, bool) {
 			parts := strings.Fields(line)
 			for _, p := range parts {
 				if strings.HasPrefix(p, "+") {
-					fmt.Sscanf(p, "+%d", &s.Ahead)
+					_, _ = fmt.Sscanf(p, "+%d", &s.Ahead)
 				} else if strings.HasPrefix(p, "-") {
-					fmt.Sscanf(p, "-%d", &s.Behind)
+					_, _ = fmt.Sscanf(p, "-%d", &s.Behind)
 				}
 			}
 		case len(line) > 0 && line[0] != '#':

@@ -127,10 +127,14 @@ func parseWranglerConfig(path string) wranglerConfig {
 
 	var cfg wranglerConfig
 	if strings.HasSuffix(path, ".toml") {
-		toml.Decode(string(data), &cfg)
+		if _, err := toml.Decode(string(data), &cfg); err != nil {
+			return wranglerConfig{}
+		}
 	} else {
 		cleaned := stripJSONComments(string(data))
-		json.Unmarshal([]byte(cleaned), &cfg)
+		if err := json.Unmarshal([]byte(cleaned), &cfg); err != nil {
+			return wranglerConfig{}
+		}
 	}
 	return cfg
 }
@@ -157,7 +161,7 @@ func stripJSONComments(s string) string {
 			}
 			if s[i] == '/' && s[i+1] == '*' {
 				i += 2
-				for i+1 < len(s) && !(s[i] == '*' && s[i+1] == '/') {
+				for i+1 < len(s) && (s[i] != '*' || s[i+1] != '/') {
 					i++
 				}
 				if i+1 < len(s) {

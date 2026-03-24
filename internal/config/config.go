@@ -66,10 +66,14 @@ func Load(projectDir ...string) *Config {
 	)
 
 	for _, path := range paths {
-		if data, err := os.ReadFile(path); err == nil {
-			toml.Decode(string(data), cfg)
-			break
+		data, err := os.ReadFile(path)
+		if err != nil {
+			continue
 		}
+		if _, err := toml.Decode(string(data), cfg); err != nil {
+			continue
+		}
+		break
 	}
 
 	// Env overrides

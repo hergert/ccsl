@@ -95,7 +95,7 @@ func runDoctor() {
 
 	raw, _ := json.Marshal(input)
 	var ctxObj map[string]any
-	json.Unmarshal(raw, &ctxObj)
+	_ = json.Unmarshal(raw, &ctxObj)
 
 	cfg := config.Load()
 	ctx, cancel := context.WithTimeout(context.Background(),
