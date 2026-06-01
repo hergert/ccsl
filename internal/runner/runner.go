@@ -21,6 +21,7 @@ import (
 	"github.com/hergert/ccsl/builtin/git"
 	"github.com/hergert/ccsl/builtin/lines"
 	"github.com/hergert/ccsl/builtin/model"
+	"github.com/hergert/ccsl/builtin/pr"
 	"github.com/hergert/ccsl/builtin/ratelimit"
 	"github.com/hergert/ccsl/builtin/worktree"
 	"github.com/hergert/ccsl/internal/config"
@@ -156,6 +157,10 @@ func runBuiltin(ctx context.Context, id string, raw map[string]any, cfg *config.
 	case "lines":
 		if c, ok := lines.Parse(raw); ok {
 			return c.Render()
+		}
+	case "pr":
+		if p, ok := pr.Parse(raw); ok {
+			return p.Render(cfg.Theme.ANSI)
 		}
 	}
 	return types.Segment{}

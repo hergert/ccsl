@@ -59,7 +59,11 @@ type doctorInput struct {
 		ContextWindowSize float64 `json:"context_window_size"`
 	} `json:"context_window"`
 	Exceeds200kTokens bool `json:"exceeds_200k_tokens"`
-	Cost              struct {
+	PR                struct {
+		Number      int    `json:"number"`
+		ReviewState string `json:"review_state"`
+	} `json:"pr"`
+	Cost struct {
 		TotalCostUSD      float64 `json:"total_cost_usd"`
 		TotalDurationMS   float64 `json:"total_duration_ms"`
 		TotalLinesAdded   float64 `json:"total_lines_added"`
@@ -85,6 +89,8 @@ func runDoctor() {
 	input.ContextWindow.UsedPercentage = 91
 	input.ContextWindow.ContextWindowSize = 1000000
 	input.Exceeds200kTokens = true
+	input.PR.Number = 1234
+	input.PR.ReviewState = "approved"
 	input.Cost.TotalCostUSD = 1.23
 	input.Cost.TotalDurationMS = 498000
 	input.Cost.TotalLinesAdded = 156

@@ -107,7 +107,7 @@ func Load(projectDir ...string) *Config {
 func defaultConfig() *Config {
 	return &Config{
 		UI: UIConfig{
-			Template: "{model}{agent?prefix= }{worktree?prefix= }{ctx?prefix= }{cost?prefix= }{ratelimit?prefix= · } {cwd}{git?prefix=:}{gcp?prefix= }{cf?prefix= }",
+			Template: "{model}{agent?prefix= }{worktree?prefix= }{ctx?prefix= }{cost?prefix= }{ratelimit?prefix= · } {cwd}{git?prefix=:}{pr?prefix= }{gcp?prefix= }{cf?prefix= }",
 			Truncate: 120,
 		},
 		Theme: ThemeConfig{
