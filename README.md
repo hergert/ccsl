@@ -44,6 +44,7 @@ Brew installs only the binary; add the `statusLine` block yourself or run the in
 | `lines` | Lines changed: `+156-23` |
 | `cwd` | Current directory |
 | `git` | `branch*⇡N⇣N≡` — dirty, ahead, behind, stash |
+| `pr` | Current branch's open PR: number + review state |
 | `gcp` | `gcp:project@config` — ⚠ on mismatch |
 | `cf` | `cf:worker@env` — ⚠ on mismatch |
 

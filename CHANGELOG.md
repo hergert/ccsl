@@ -9,6 +9,7 @@ All notable changes to ccsl (Claude Code StatusLine) will be documented in this 
   sidebar via `pane.report_metadata` (display-only, best-effort, 6h TTL,
   `CCSL_HERDR=0` to disable)
 - `effort` builtin: reasoning effort level (statusline `effort.level`, CC 2.1.119+)
+- `pr` builtin: current branch's open PR from the statusline `pr` field (CC 2.1.145+)
 - `ratelimit`: parse `seven_day.resets_at`; countdown gains day format (`↻2d3h`)
 - `worktree`: fall back to `workspace.git_worktree` outside `--worktree` sessions
 - Truncation caps at the `COLUMNS` terminal width Claude Code sets (CC 2.1.153+)
