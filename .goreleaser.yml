@@ -24,6 +24,10 @@ checksum:
 changelog:
   disable: true
 
+# Reruns of a partially failed release job must overwrite leftover assets.
+release:
+  replace_existing_artifacts: true
+
 homebrew_casks:
   - repository:
       owner: hergert
