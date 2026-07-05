@@ -1,0 +1,46 @@
+version: 2
+
+project_name: ccsl
+
+builds:
+  - main: ./cmd/ccsl
+    binary: ccsl
+    env:
+      - CGO_ENABLED=0
+    goos: [darwin, linux]
+    goarch: [amd64, arm64]
+    ldflags:
+      - -s -w -X main.version={{.Version}}
+    mod_timestamp: "{{ .CommitTimestamp }}"
+
+archives:
+  - name_template: "ccsl_{{ .Os }}_{{ .Arch }}"
+    formats: ["tar.gz"]
+
+checksum:
+  name_template: "checksums.txt"
+
+# CHANGELOG.md is maintained by hand.
+changelog:
+  disable: true
+
+homebrew_casks:
+  - repository:
+      owner: hergert
+      name: homebrew-tap
+      token: "{{ .Env.HOMEBREW_TAP_TOKEN }}"
+    directory: Casks
+    homepage: "https://github.com/hergert/ccsl"
+    description: "Practical status line for Claude Code"
+    caveats: |
+      Point Claude Code at ccsl in ~/.claude/settings.json:
+        "statusLine": {"type": "command", "command": "ccsl", "padding": 0, "refreshInterval": 60}
+      or run the installer, which patches it for you:
+        curl -fsSL https://raw.githubusercontent.com/hergert/ccsl/main/scripts/install.sh | bash
+    # Unsigned binary: clear Gatekeeper quarantine so it runs after install.
+    hooks:
+      post:
+        install: |
+          if system_command("/usr/bin/xattr", args: ["-h"]).exit_status == 0
+            system_command "/usr/bin/xattr", args: ["-dr", "com.apple.quarantine", "#{staged_path}/ccsl"]
+          end

@@ -17,6 +17,7 @@ import (
 	ctxbuiltin "github.com/hergert/ccsl/builtin/ctx"
 	"github.com/hergert/ccsl/builtin/cwd"
 	"github.com/hergert/ccsl/builtin/duration"
+	"github.com/hergert/ccsl/builtin/effort"
 	"github.com/hergert/ccsl/builtin/gcp"
 	"github.com/hergert/ccsl/builtin/git"
 	"github.com/hergert/ccsl/builtin/lines"
@@ -145,6 +146,10 @@ func runBuiltin(ctx context.Context, id string, raw map[string]any, cfg *config.
 	case "duration":
 		if d, ok := duration.Parse(raw); ok {
 			return d.Render()
+		}
+	case "effort":
+		if e, ok := effort.Parse(raw); ok {
+			return e.Render()
 		}
 	case "ratelimit":
 		if l, ok := ratelimit.Parse(raw); ok {

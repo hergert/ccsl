@@ -2,7 +2,32 @@
 
 All notable changes to ccsl (Claude Code StatusLine) will be documented in this file.
 
-## [Unreleased]
+## [0.2.0]
+
+### Added
+- herdr reporter: inside a herdr pane, report model + usage to the agent
+  sidebar via `pane.report_metadata` (display-only, best-effort, 6h TTL,
+  `CCSL_HERDR=0` to disable)
+- `effort` builtin: reasoning effort level (statusline `effort.level`, CC 2.1.119+)
+- `ratelimit`: parse `seven_day.resets_at`; countdown gains day format (`↻2d3h`)
+- `worktree`: fall back to `workspace.git_worktree` outside `--worktree` sessions
+- Truncation caps at the `COLUMNS` terminal width Claude Code sets (CC 2.1.153+)
+- Behavior tests for ctx/ratelimit thresholds, truncation, and the reporter
+- Installer sets `statusLine.refreshInterval: 60` so idle sessions stay fresh
+- `ccsl --version` and a goreleaser release pipeline: prebuilt darwin/linux
+  binaries (amd64/arm64), checksums, Homebrew tap (`hergert/tap/ccsl`)
+- Installer now fetches the latest release binary (checksum-verified, no Go
+  required; `--build` forces source build), merges into an existing
+  `statusLine` block instead of replacing it, and uninstall only removes a
+  `statusLine` that still points at ccsl
+
+### Removed
+- Dead `theme.icons` config and `CCSL_ICONS` env override
+- `docs/CONFIG.md` (stale; folded into README)
+- Decorative default `timeout_ms` entries for pure JSON-parser builtins
+  (only git keeps one; exec plugins are unchanged)
+- `make demo` inline sample JSON (now runs `ccsl doctor`); `make install` is
+  the local dev build instead of re-cloning via the public installer
 
 ### Changed
 - Simplified architecture: removed caching, onlyif conditions, setup wizard

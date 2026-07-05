@@ -7,9 +7,9 @@ import (
 )
 
 type ContextWindow struct {
-	UsedPct       float64
-	WindowSize    float64
-	Exceeds200k   bool
+	UsedPct     float64
+	WindowSize  float64
+	Exceeds200k bool
 }
 
 func Parse(raw map[string]any) (ContextWindow, bool) {
@@ -44,9 +44,11 @@ func (c ContextWindow) IsLarge() bool {
 
 // Anthropic's MRCR v2 benchmark: Opus drops from 93% (256K) to 76% (1M).
 // User reports (github.com/anthropics/claude-code/issues/35296, #34685):
-//   20-40% of 1M: degradation starts, wrong approaches
-//   40-60%: fabrications, confident false conclusions
-//   60%+:   prior facts inaccessible, irrecoverable loops
+//
+//	20-40% of 1M: degradation starts, wrong approaches
+//	40-60%: fabrications, confident false conclusions
+//	60%+:   prior facts inaccessible, irrecoverable loops
+//
 // Effective useful context is ~200-400K tokens regardless of window size.
 // 1M thresholds are therefore more aggressive, not less.
 func (c ContextWindow) severity() string {

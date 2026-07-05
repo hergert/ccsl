@@ -7,16 +7,19 @@ type Worktree struct {
 	Branch string
 }
 
-// Only present when running in a --worktree session.
+// worktree.* only exists in --worktree sessions; workspace.git_worktree is set
+// whenever the cwd is inside any linked git worktree.
 func Parse(raw map[string]any) (Worktree, bool) {
-	data, ok := raw["worktree"].(map[string]any)
-	if !ok {
-		return Worktree{}, false
-	}
-
 	w := Worktree{}
-	w.Name, _ = data["name"].(string)
-	w.Branch, _ = data["branch"].(string)
+	if data, ok := raw["worktree"].(map[string]any); ok {
+		w.Name, _ = data["name"].(string)
+		w.Branch, _ = data["branch"].(string)
+	}
+	if w.Name == "" && w.Branch == "" {
+		if ws, ok := raw["workspace"].(map[string]any); ok {
+			w.Name, _ = ws["git_worktree"].(string)
+		}
+	}
 
 	if w.Name == "" && w.Branch == "" {
 		return Worktree{}, false

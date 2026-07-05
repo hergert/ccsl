@@ -22,8 +22,7 @@ type UIConfig struct {
 }
 
 type ThemeConfig struct {
-	Icons bool `toml:"icons"`
-	ANSI  bool `toml:"ansi"`
+	ANSI bool `toml:"ansi"`
 }
 
 type PluginsConfig struct {
@@ -80,9 +79,6 @@ func Load(projectDir ...string) *Config {
 	if os.Getenv("CCSL_ANSI") == "0" {
 		cfg.Theme.ANSI = false
 	}
-	if os.Getenv("CCSL_ICONS") == "0" {
-		cfg.Theme.Icons = false
-	}
 	if v := os.Getenv("CCSL_TEMPLATE"); v != "" {
 		cfg.UI.Template = v
 	}
@@ -107,29 +103,19 @@ func Load(projectDir ...string) *Config {
 func defaultConfig() *Config {
 	return &Config{
 		UI: UIConfig{
-			Template: "{model}{agent?prefix= }{worktree?prefix= }{ctx?prefix= }{cost?prefix= }{ratelimit?prefix= · } {cwd}{git?prefix=:}{pr?prefix= }{gcp?prefix= }{cf?prefix= }",
+			Template: "{model}{effort?prefix= }{agent?prefix= }{worktree?prefix= }{ctx?prefix= }{cost?prefix= }{ratelimit?prefix= · } {cwd}{git?prefix=:}{pr?prefix= }{gcp?prefix= }{cf?prefix= }",
 			Truncate: 120,
 		},
 		Theme: ThemeConfig{
-			Icons: true,
-			ANSI:  true,
+			ANSI: true,
 		},
 		Plugins: PluginsConfig{
 			Order: nil, // derive from template by default
 		},
+		// Pure JSON parsers need no entries; only segments that do real work
+		// (subprocesses, file walks) get their own timeout.
 		Plugin: map[string]PluginConfig{
-			"model":     {Type: "builtin", TimeoutMS: 10},
-			"agent":     {Type: "builtin", TimeoutMS: 10},
-			"worktree":  {Type: "builtin", TimeoutMS: 10},
-			"ctx":       {Type: "builtin", TimeoutMS: 10},
-			"cost":      {Type: "builtin", TimeoutMS: 10},
-			"ratelimit": {Type: "builtin", TimeoutMS: 10},
-			"duration":  {Type: "builtin", TimeoutMS: 10},
-			"lines":     {Type: "builtin", TimeoutMS: 10},
-			"cwd":       {Type: "builtin", TimeoutMS: 10},
-			"git":       {Type: "builtin", TimeoutMS: 80},
-			"gcp":       {Type: "builtin", TimeoutMS: 10},
-			"cf":        {Type: "builtin", TimeoutMS: 10},
+			"git": {Type: "builtin", TimeoutMS: 80},
 		},
 		Limits: LimitsConfig{
 			PerPluginTimeoutMS: 100,

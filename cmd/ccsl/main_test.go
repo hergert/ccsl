@@ -94,6 +94,16 @@ func TestSegmentGeneration(t *testing.T) {
 			expected: []string{"model", "cwd", "worktree"},
 		},
 		{
+			name: "with effort level",
+			input: `{
+				"model": {"display_name": "Test"},
+				"workspace": {"current_dir": "/tmp"},
+				"effort": {"level": "max"}
+			}`,
+			template: "{model} {cwd}{effort?prefix= }",
+			expected: []string{"model", "cwd", "effort"},
+		},
+		{
 			name: "with lines changed",
 			input: `{
 				"model": {"display_name": "Test"},

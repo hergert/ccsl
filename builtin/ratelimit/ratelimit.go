@@ -27,26 +27,31 @@ func Parse(raw map[string]any) (Limits, bool) {
 		return Limits{}, false
 	}
 
-	l := Limits{}
-	if fh, ok := rl["five_hour"].(map[string]any); ok {
-		if pct, ok := fh["used_percentage"].(float64); ok {
-			w := &Window{UsedPct: pct, Label: "⁵ʰ"}
-			if resetAt, ok := fh["resets_at"].(float64); ok {
-				w.ResetsAt = time.Unix(int64(resetAt), 0)
-			}
-			l.FiveHour = w
-		}
-	}
-	if sd, ok := rl["seven_day"].(map[string]any); ok {
-		if pct, ok := sd["used_percentage"].(float64); ok {
-			l.SevenDay = &Window{UsedPct: pct, Label: "⁷ᵈ"}
-		}
+	l := Limits{
+		FiveHour: parseWindow(rl, "five_hour", "⁵ʰ"),
+		SevenDay: parseWindow(rl, "seven_day", "⁷ᵈ"),
 	}
 
 	if l.FiveHour == nil && l.SevenDay == nil {
 		return Limits{}, false
 	}
 	return l, true
+}
+
+func parseWindow(rl map[string]any, key, label string) *Window {
+	m, ok := rl[key].(map[string]any)
+	if !ok {
+		return nil
+	}
+	pct, ok := m["used_percentage"].(float64)
+	if !ok {
+		return nil
+	}
+	w := &Window{UsedPct: pct, Label: label}
+	if resetAt, ok := m["resets_at"].(float64); ok {
+		w.ResetsAt = time.Unix(int64(resetAt), 0)
+	}
+	return w
 }
 
 func (w *Window) severity() string {
@@ -64,9 +69,14 @@ func (w *Window) format(ansi bool) string {
 	s := fmt.Sprintf("%.0f%%", w.UsedPct) + w.Label
 	if remaining := time.Until(w.ResetsAt); remaining > 0 && w.UsedPct >= 70 {
 		m := int(remaining.Minutes())
-		if m >= 60 {
+		switch {
+		case m >= 1440 && (m%1440)/60 == 0:
+			s += fmt.Sprintf("↻%dd", m/1440)
+		case m >= 1440:
+			s += fmt.Sprintf("↻%dd%dh", m/1440, (m%1440)/60)
+		case m >= 60:
 			s += fmt.Sprintf("↻%dh%dm", m/60, m%60)
-		} else {
+		default:
 			s += fmt.Sprintf("↻%dm", m)
 		}
 	}

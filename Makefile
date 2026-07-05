@@ -1,30 +1,32 @@
-.PHONY: build test clean install uninstall demo help
+.PHONY: build test lint demo install uninstall clean help
 
 build:
 	go build -o ccsl ./cmd/ccsl
 
 test:
-	go test -v ./...
+	go test ./...
+
+lint:
+	gofmt -l . && go vet ./...
+
+demo: build
+	./ccsl doctor
+
+install:
+	go build -o $(HOME)/.local/bin/ccsl ./cmd/ccsl
+
+uninstall:
+	./scripts/uninstall.sh
 
 clean:
 	rm -f ccsl
 	go clean
 
-install: build
-	./scripts/install.sh
-
-uninstall:
-	./scripts/uninstall.sh
-
-demo: build
-	echo '{"model":{"display_name":"Opus 4.6"},"agent":{"name":"task"},"worktree":{"name":"fix-auth","branch":"wt/fix-auth"},"workspace":{"current_dir":"'$(shell pwd)'"},"context_window":{"used_percentage":92,"context_window_size":1000000},"exceeds_200k_tokens":true,"cost":{"total_cost_usd":0.05,"total_duration_ms":498000,"total_lines_added":156,"total_lines_removed":23},"rate_limits":{"five_hour":{"used_percentage":72},"seven_day":{"used_percentage":15}}}' | ./ccsl
-
 help:
-	@echo "Available targets:"
-	@echo "  build     - Build the ccsl binary"
+	@echo "  build     - Build the ccsl binary here"
 	@echo "  test      - Run all tests"
+	@echo "  lint      - gofmt + go vet"
+	@echo "  demo      - Build and run ccsl doctor with sample data"
+	@echo "  install   - Build and install to ~/.local/bin (dev flow)"
+	@echo "  uninstall - Remove binary and settings entry"
 	@echo "  clean     - Clean build artifacts"
-	@echo "  install   - Install ccsl locally"
-	@echo "  uninstall - Uninstall ccsl"
-	@echo "  demo      - Run demo with sample data"
-	@echo "  help      - Show this help"

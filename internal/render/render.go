@@ -3,6 +3,7 @@ package render
 import (
 	"net/url"
 	"regexp"
+	"strconv"
 	"strings"
 	"unicode/utf8"
 
@@ -21,6 +22,19 @@ type segmentPos struct {
 
 func visibleLen(s string) int {
 	return utf8.RuneCountInString(ansiRe.ReplaceAllString(s, ""))
+}
+
+// EffectiveMaxLen caps the configured truncate width at the terminal width
+// Claude Code reports via the COLUMNS env var (set since 2.1.153).
+func EffectiveMaxLen(configured int, columnsEnv string) int {
+	cols, err := strconv.Atoi(strings.TrimSpace(columnsEnv))
+	if err != nil || cols <= 0 {
+		return configured
+	}
+	if configured <= 0 || cols < configured {
+		return cols
+	}
+	return configured
 }
 
 func Line(template string, segments []types.Segment, pal *palette.Palette, maxLen int) string {

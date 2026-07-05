@@ -14,7 +14,7 @@ Claude's statusLine JSON. Fields vary by version; expect keys like:
 
 ```json
 {
-  "model": { "id": "claude-3-5-sonnet-20241022", "display_name": "Sonnet 3.5" },
+  "model": { "id": "claude-opus-4-8", "display_name": "Opus 4.8" },
   "workspace": {
     "current_dir": "/path/project",
     "project_dir": "/path/project"

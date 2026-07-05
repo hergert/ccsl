@@ -9,15 +9,25 @@ import (
 	"time"
 
 	"github.com/hergert/ccsl/internal/config"
+	"github.com/hergert/ccsl/internal/herdr"
 	"github.com/hergert/ccsl/internal/palette"
 	"github.com/hergert/ccsl/internal/render"
 	"github.com/hergert/ccsl/internal/runner"
 )
 
+// Stamped by goreleaser via -X main.version.
+var version = "dev"
+
 func main() {
-	if len(os.Args) > 1 && os.Args[1] == "doctor" {
-		runDoctor()
-		return
+	if len(os.Args) > 1 {
+		switch os.Args[1] {
+		case "doctor":
+			runDoctor()
+			return
+		case "--version":
+			fmt.Println("ccsl " + version)
+			return
+		}
 	}
 
 	raw, err := io.ReadAll(os.Stdin)
@@ -43,17 +53,25 @@ func main() {
 	defer cancel()
 
 	segs := runner.Collect(ctx, ctxObj, raw, cfg)
-	fmt.Println(render.Line(cfg.UI.Template, segs, palette.From(cfg), cfg.UI.Truncate))
+	maxLen := render.EffectiveMaxLen(cfg.UI.Truncate, os.Getenv("COLUMNS"))
+	fmt.Println(render.Line(cfg.UI.Template, segs, palette.From(cfg), maxLen))
+	herdr.Report(ctxObj)
 }
 
 type doctorInput struct {
-	Model         struct{ DisplayName string `json:"display_name"` } `json:"model"`
-	Agent         struct{ Name string `json:"name"` }               `json:"agent"`
+	Model struct {
+		DisplayName string `json:"display_name"`
+	} `json:"model"`
+	Agent struct {
+		Name string `json:"name"`
+	} `json:"agent"`
 	Worktree struct {
 		Name   string `json:"name"`
 		Branch string `json:"branch"`
 	} `json:"worktree"`
-	Workspace     struct{ CurrentDir string `json:"current_dir"` }  `json:"workspace"`
+	Workspace struct {
+		CurrentDir string `json:"current_dir"`
+	} `json:"workspace"`
 	ContextWindow struct {
 		UsedPercentage    float64 `json:"used_percentage"`
 		ContextWindowSize float64 `json:"context_window_size"`
@@ -74,14 +92,20 @@ type doctorInput struct {
 			UsedPercentage float64 `json:"used_percentage"`
 			ResetsAt       int64   `json:"resets_at"`
 		} `json:"five_hour"`
-		SevenDay struct{ UsedPercentage float64 `json:"used_percentage"` } `json:"seven_day"`
+		SevenDay struct {
+			UsedPercentage float64 `json:"used_percentage"`
+			ResetsAt       int64   `json:"resets_at"`
+		} `json:"seven_day"`
 	} `json:"rate_limits"`
+	Effort struct {
+		Level string `json:"level"`
+	} `json:"effort"`
 }
 
 func runDoctor() {
 	cwd, _ := os.Getwd()
 	input := doctorInput{}
-	input.Model.DisplayName = "Opus 4.6"
+	input.Model.DisplayName = "Opus 4.8 (1M context)"
 	input.Agent.Name = "task"
 	input.Worktree.Name = "fix-auth"
 	input.Worktree.Branch = "wt/fix-auth"
@@ -97,7 +121,9 @@ func runDoctor() {
 	input.Cost.TotalLinesRemoved = 23
 	input.RateLimits.FiveHour.UsedPercentage = 72
 	input.RateLimits.FiveHour.ResetsAt = time.Now().Add(23 * time.Minute).Unix()
-	input.RateLimits.SevenDay.UsedPercentage = 15
+	input.RateLimits.SevenDay.UsedPercentage = 82
+	input.RateLimits.SevenDay.ResetsAt = time.Now().Add(51*time.Hour + 30*time.Minute).Unix()
+	input.Effort.Level = "max"
 
 	raw, _ := json.Marshal(input)
 	var ctxObj map[string]any
@@ -114,7 +140,11 @@ func runDoctor() {
 
 	line := render.Line(cfg.UI.Template, segs, palette.From(cfg), cfg.UI.Truncate)
 
+	fmt.Printf("version:  %s\n", version)
 	fmt.Printf("template: %s\n", cfg.UI.Template)
 	fmt.Printf("elapsed:  %dms\n", elapsed.Milliseconds())
 	fmt.Printf("output:   %s\n", line)
+
+	customStatus, displayAgent := herdr.Status(ctxObj)
+	fmt.Printf("herdr:    %s · %s\n", displayAgent, customStatus)
 }
