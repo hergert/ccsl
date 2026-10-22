@@ -56,9 +56,9 @@ func (s Status) Render(ansi bool) types.Segment {
 }
 
 func Collect(ctx context.Context, cfg *config.Config) (Status, bool) {
-	args := []string{"status", "--porcelain=v2", "--branch", "--untracked-files=no"}
+	args := []string{"--no-optional-locks", "status", "--porcelain=v2", "--branch", "--untracked-files=no"}
 	if pcfg, exists := cfg.Plugin["git"]; exists && pcfg.Untracked {
-		args = []string{"status", "--porcelain=v2", "--branch"}
+		args = []string{"--no-optional-locks", "status", "--porcelain=v2", "--branch"}
 	}
 
 	cmd := exec.CommandContext(ctx, "git", args...)
